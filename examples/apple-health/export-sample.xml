@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Watch" unit="count/min" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 06:30:00 +0000" value="152"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-06-20 00:00:00 +0000" endDate="2026-06-21 00:00:00 +0000" value="8421"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Withings" unit="kg" startDate="2026-06-20 07:00:00 +0000" endDate="2026-06-20 07:00:00 +0000" value="80.5"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Apple Watch" value="HKCategoryValueSleepAnalysisAsleepCore" startDate="2026-06-20 00:00:00 +0000" endDate="2026-06-20 01:30:00 +0000"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Apple Watch" value="HKCategoryValueSleepAnalysisAsleepDeep" startDate="2026-06-20 01:30:00 +0000" endDate="2026-06-20 02:15:00 +0000"/>
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="42" durationUnit="min" totalDistance="10" totalDistanceUnit="km" totalEnergyBurned="520" totalEnergyBurnedUnit="kcal" sourceName="Apple Watch" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 07:12:00 +0000"/>
+</HealthData>

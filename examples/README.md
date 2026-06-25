@@ -9,6 +9,7 @@ public — and a seed for the eventual mapper SDKs (launch Phase D).
 | [`hevy/`](./hevy/) | B (strength) | Real Hevy CSV → Session/Exercise/WorkUnit. Validates + normalizes. |
 | [`strong/`](./strong/) | B (strength) | Strong CSV (documented columns) → same shape. Validates + normalizes. |
 | [`strava/`](./strava/) | A + B | Activity + streams → sampleArray Measurements + Session w/ `measuredBy`. Validates + normalizes. |
+| [`apple-health/`](./apple-health/) | A + B | `export.xml`: discrete + interval quantity samples, **sleep category** series, `HKWorkout` → Session. Validates + normalizes. |
 
 Run any: `tsx examples/<src>/map-<src>.ts`
 
@@ -41,3 +42,17 @@ Run any: `tsx examples/<src>/map-<src>.ts`
 4. **Validate WIRE records, not the §8.3 canonical form** — the canonical form uses
    string fixed-point + propagated/flattened fields and is a *comparison* artifact, not
    the binding. (See the standard's `schema/README`.)
+5. **Pillar A is mature (Apple Health).** Discrete quantity samples (instant + daily
+   interval aggregate via `startTime≠endTime`), **sleep stages → multiple `category`
+   Measurements over adjacent intervals** (exactly §4.3 — not a `sampleArray`), and lazy
+   type tokens (known HK identifiers → canonical `heart_rate`/`step_count`; unmapped →
+   `apple:HK…`, §4.4) all map with no gaps. `HKWorkout` → Session + continuous WorkUnit
+   carrying distance+energy+time.
+
+## Health Connect parity (not a separate mapper)
+
+Android Health Connect maps the same way and needs no new model features:
+`StepsRecord` → interval `quantity` Measurement · `HeartRateRecord.samples` →
+`sampleArray` (or discrete quantity) · `SleepSessionRecord` stages → `category`
+Measurements (like Apple) · `ExerciseSessionRecord` (+ laps/segments/route) → `Session`
+(→ Blocks/Exercise; route → `sampleArray` location). Its `title` → the v0.3 `name`.
