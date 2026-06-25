@@ -1,0 +1,116 @@
+// Canonicalization primitives for OpenBody §8.3.
+import canonicalizeMod from "canonicalize";
+// canonicalize is CJS (module.exports = fn); cast fixes NodeNext default-import types.
+const canonicalize = canonicalizeMod as unknown as (v: unknown) => string | undefined;
+
+export type Json = null | boolean | string | number | Json[] | { [k: string]: Json };
+export interface FixedPoint { coefficient: string; exponent: string }
+
+const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"]);
+
+/**
+ * Step 1 (numbers): reduce any numeric value — a JS number or a {coefficient,exponent}
+ * object — to lowest-terms fixed-point with string coefficient/exponent (§8.3).
+ *
+ * NOTE / known limitation: JSON.parse already coerced source numbers to float64, so
+ * very high-precision decimals can lose their exact source text. A fully spec-correct
+ * implementation parses the raw JSON number text (e.g. a lossless parser). For typical
+ * fitness data this round-trips exactly; tracked as a TODO.
+ */
+export function canonNumber(n: number | { coefficient: unknown; exponent: unknown }): FixedPoint {
+  let coeff: bigint;
+  let exp: number;
+  if (typeof n === "number") {
+    [coeff, exp] = decimalParts(n.toString());
+  } else {
+    coeff = BigInt(String((n as any).coefficient).trim());
+    exp = Number((n as any).exponent);
+  }
+  if (coeff === 0n) return { coefficient: "0", exponent: "0" };
+  const negative = coeff < 0n;
+  if (negative) coeff = -coeff;
+  while (coeff % 10n === 0n) { coeff /= 10n; exp += 1; }
+  return { coefficient: (negative ? "-" : "") + coeff.toString(), exponent: String(exp) };
+}
+
+function decimalParts(s: string): [bigint, number] {
+  s = s.trim();
+  let exp = 0;
+  const e = s.search(/[eE]/);
+  if (e >= 0) { exp = parseInt(s.slice(e + 1), 10); s = s.slice(0, e); }
+  const dot = s.indexOf(".");
+  if (dot >= 0) { exp -= s.length - dot - 1; s = s.slice(0, dot) + s.slice(dot + 1); }
+  return [BigInt(s), exp];
+}
+
+export function isFixedPointLike(v: unknown): boolean {
+  return !!v && typeof v === "object" && !Array.isArray(v)
+    && "coefficient" in (v as any) && "exponent" in (v as any)
+    && Object.keys(v as any).length === 2;
+}
+
+/** Step 1 (timestamps): canonical RFC 3339 spelling (§8.3). */
+export function canonTimestamp(s: string): string {
+  let t = s.trim().toUpperCase();
+  // zero offset -> Z
+  t = t.replace(/[+-]00:00$/, "Z");
+  // strip trailing-zero fractional seconds (and a bare dot)
+  t = t.replace(/(\.\d*?)0+(?=Z|[+-]\d\d:\d\d|$)/, "$1").replace(/\.(?=Z|[+-]\d\d:\d\d|$)/, "");
+  return t;
+}
+
+/** Recursively apply number + timestamp canonicalization across a record. */
+export function deepCanon(value: Json, key?: string): Json {
+  if (typeof value === "number") return canonNumber(value) as unknown as Json;
+  if (isFixedPointLike(value)) return canonNumber(value as any) as unknown as Json;
+  if (Array.isArray(value)) return value.map((v) => deepCanon(v));
+  if (value && typeof value === "object") {
+    const out: Record<string, Json> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = (typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v as Json, k);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Step 9: order the set-valued arrays per §8.3 (key order, then canonical-byte tiebreak). */
+const SET_ARRAY_KEYS: Record<string, string[]> = {
+  links: ["type", "ref"],
+  effortLoad: ["kind", "method"],
+  modifiers: ["type"],
+};
+
+function orderSetArrays(value: Json): Json {
+  if (Array.isArray(value)) return value.map(orderSetArrays);
+  if (value && typeof value === "object") {
+    const out: Record<string, Json> = {};
+    for (const [k, v] of Object.entries(value)) {
+      let nv = orderSetArrays(v as Json);
+      if (Array.isArray(nv) && k in SET_ARRAY_KEYS) {
+        const keys = SET_ARRAY_KEYS[k];
+        nv = [...nv].sort((a, b) => {
+          for (const kk of keys) {
+            const av = String((a as any)?.[kk] ?? "");
+            const bv = String((b as any)?.[kk] ?? "");
+            if (av !== bv) return av < bv ? -1 : 1;
+          }
+          const ab = canonicalize(a) ?? "";
+          const bb = canonicalize(b) ?? "";
+          return ab < bb ? -1 : ab > bb ? 1 : 0;
+        });
+      }
+      out[k] = nv;
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Produce the canonical byte string for one normalized record (RFC 8785 JCS). */
+export function canonicalString(record: Json): string {
+  const ordered = orderSetArrays(record);
+  const s = canonicalize(ordered);
+  if (s === undefined) throw new Error("canonicalize failed");
+  return s;
+}
