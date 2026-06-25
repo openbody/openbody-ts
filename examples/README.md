@@ -26,12 +26,12 @@ Run any: `tsx examples/<src>/map-<src>.ts`
 
 ## Findings worth acting on
 
-1. **No first-class workout `name`/`label` (candidate model addition).** Every app has
-   a workout title ("Morning workout", "Push Day") and OpenBody has no field for it.
-   We preserve it losslessly in a namespaced `extension` (per §3.1, nothing dropped) —
-   but an optional core `name`/`label` on `Session`/`Program`/`Block` is a strong
-   candidate, since titles are ubiquitous and user-facing. *(The first Hevy mapper
-   silently dropped `title` — a real losslessness bug, now fixed via extension.)*
+1. **No first-class workout `name`/`label` — RESOLVED in v0.3.** Every app has a
+   workout title ("Morning workout", "Push Day") and v0.2 had no interoperable home
+   for it (an extension preserves but doesn't interoperate). **v0.3 added optional
+   `name` on `Program`/`Session`/`Block` and `notes` on `Session`/`Block`/`Exercise`/
+   `WorkUnit`.** The mappers now emit `name` directly. *(The first Hevy mapper silently
+   dropped `title` — a real losslessness bug this finding surfaced.)*
 2. **`derivedFrom` ⇒ `provenance.algorithm` required (§7.4)** bites mappers: Strava
    doesn't publish its aggregation algorithm, so the mapper supplies a best-effort
    `algorithm.name`. The rule is defensible (derived values should be traceable) but

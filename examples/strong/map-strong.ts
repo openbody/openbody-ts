@@ -33,10 +33,9 @@ for (const [, wrows] of byWorkout) {
   const session: any = {
     id: `strong-w${wIdx}`, recordType: "Session", subject,
     disciplines: ["strength"], startTime: start, endTime: end,
-    // FINDING: OpenBody has no first-class workout `name`. To stay LOSSLESS (§3.1) the
-    // human workout title is preserved in a namespaced extension. (Candidate: an
-    // optional core `name`/`label` field — see examples README.)
-    extension: { "io.strong.export": { workoutName: f["Workout Name"], workoutNo: f["Workout No"] } },
+    name: f["Workout Name"], // RESOLVED (v0.3): first-class `name`.
+    // workoutNo is a vendor record id (not a user-facing label) -> stays in extension.
+    extension: { "io.strong.export": { workoutNo: f["Workout No"] } },
     exercises: [] as any[],
   };
   const exGroups: { name: string; sets: any[] }[] = [];
@@ -56,7 +55,7 @@ for (const [, wrows] of byWorkout) {
       if (dist) perf.distance = { absolute: { value: dist, unit: "m" } };
       if (secs) perf.time = secs;
       const wu: any = { id: `${session.id}-ex${i}-set${j}`, recordType: "WorkUnit", scoring, performance: perf };
-      if (s.Notes) wu.extension = { "io.strong.export": { note: s.Notes } };
+      if (s.Notes) wu.notes = s.Notes; // RESOLVED (v0.3): first-class `notes`.
       return wu;
     }),
   }));
