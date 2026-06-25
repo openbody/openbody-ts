@@ -49,6 +49,10 @@ for (const [, srows] of sessions) {
   const session: any = {
     id: `hevy-sess-${sIdx}`, recordType: "Session", subject: "subj-001",
     disciplines: ["strength"], startTime: toRfc3339(f.start_time), endTime: toRfc3339(f.end_time),
+    // FINDING: OpenBody has no first-class workout `name`. To stay LOSSLESS (§3.1) the
+    // Hevy title/description are preserved in a namespaced extension. (Candidate: an
+    // optional core `name`/`label` field — see examples README.)
+    extension: { "com.hevyapp.export": { title: f.title, ...(f.description ? { description: f.description } : {}) } },
   };
   // group consecutive rows by exercise (title + superset_id)
   const exGroups: { title: string; superset: string; sets: Record<string, string>[] }[] = [];

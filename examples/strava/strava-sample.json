@@ -1,0 +1,25 @@
+{
+  "activity": {
+    "id": 14582931007,
+    "name": "Morning Run",
+    "type": "Run",
+    "sport_type": "Run",
+    "start_date": "2026-06-20T06:30:00Z",
+    "elapsed_time": 2600,
+    "moving_time": 2520,
+    "distance": 10000.0,
+    "total_elevation_gain": 84.0,
+    "average_heartrate": 152.0,
+    "max_heartrate": 178,
+    "average_watts": 241.3,
+    "device_name": "Garmin Forerunner 965"
+  },
+  "streams": {
+    "time":      { "type": "time",      "data": [0, 1, 2, 3, 4], "series_type": "distance", "original_size": 5, "resolution": "high" },
+    "heartrate": { "type": "heartrate", "data": [140, 150, 152, 155, 158], "series_type": "distance", "original_size": 5, "resolution": "high" },
+    "latlng":    { "type": "latlng",    "data": [[38.603734, -122.864112], [38.604100, -122.864500], [38.604480, -122.864910], [38.604860, -122.865320], [38.605240, -122.865730]], "series_type": "distance", "original_size": 5, "resolution": "high" },
+    "altitude":  { "type": "altitude",  "data": [10.2, 10.6, 11.1, 11.0, 10.8], "series_type": "distance", "original_size": 5, "resolution": "high" },
+    "watts":     { "type": "watts",     "data": [230, 238, 245, 244, 250], "series_type": "distance", "original_size": 5, "resolution": "high" },
+    "cadence":   { "type": "cadence",   "data": [86, 87, 88, 88, 89], "series_type": "distance", "original_size": 5, "resolution": "high" }
+  }
+}
