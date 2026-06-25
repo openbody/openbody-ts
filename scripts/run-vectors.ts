@@ -58,8 +58,18 @@ for (const f of files) {
       }
     } else if (v.kind === "normalization") {
       const recs = normalizeDocument(v.input);
-      ok(`${name} (${recs.length} canonical records)`);
-      for (const r of recs) console.log("       ·", r);
+      if (Array.isArray(v.expected)) {
+        const match = recs.length === v.expected.length && recs.every((s, i) => s === v.expected[i]);
+        if (match) ok(`${name} (${recs.length} records, exact match)`);
+        else {
+          bad(name, "normalized output != pinned expected");
+          console.log("       got:     ", recs);
+          console.log("       expected:", v.expected);
+        }
+      } else {
+        ok(`${name} (${recs.length} canonical records; no pinned expected)`);
+        for (const r of recs) console.log("       ·", r);
+      }
     } else {
       bad(name, `unknown kind ${v.kind}`);
     }
