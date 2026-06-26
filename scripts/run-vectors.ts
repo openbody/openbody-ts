@@ -59,6 +59,12 @@ for (const f of files) {
         console.log("       a:", normalizeDocument(vL.a));
         console.log("       b:", normalizeDocument(vL.b));
       }
+    } else if (v.kind === "inequivalent") {
+      const ea = allValid(v.a), eb = allValid(v.b);
+      if (ea) { bad(name, `a ${ea}`); continue; }
+      if (eb) { bad(name, `b ${eb}`); continue; }
+      if (!equivalent(vL.a, vL.b)) ok(name);
+      else bad(name, "a and b normalized EQUAL but must stay distinct");
     } else if (v.kind === "normalization") {
       const recs = normalizeDocument(vL.input);
       if (Array.isArray(v.expected)) {
