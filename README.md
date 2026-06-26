@@ -4,7 +4,7 @@ The **TypeScript reference implementation** of the [OpenBody](https://github.com
 standard — validate, canonically normalize (§8.3), and check equivalence of OpenBody
 records, plus a conformance-vector runner.
 
-> Status: early (v0.1.0), tracks OpenBody spec **v0.2.1**. A reference implementation
+> Status: early (v0.1.0), tracks OpenBody spec **v0.3.x**. A reference implementation
 > is *one* implementation, not normative — `SPEC.md` is the source of truth.
 > **Licensed Apache-2.0** (the standard itself is OWFa-1.0; kept in a separate repo).
 
@@ -16,6 +16,8 @@ records, plus a conformance-vector runner.
   fold, `sets` expansion, deterministic id assignment, flatten + `partOf`, status
   default, RFC 8785 serialization) → a sorted set of canonical record byte strings.
 - **`equivalent(a, b)`** — true iff two documents normalize to the same set.
+- **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health;
+  Health Connect via the Apple mapper): pure functions with round-trip tests (`npm run mappers`).
 
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
@@ -24,7 +26,11 @@ canonical bytes the spec describes.
 
 ```bash
 npm install
+npm test           # typecheck + lossless number checks + vectors + mapper round-trips
+# …or individually:
 npm run vectors    # run the standard's conformance vectors against this impl
+npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple) round-trip
+npm run lossless   # §8.3 lossless-number checks
 npm run typecheck
 ```
 
@@ -44,8 +50,9 @@ lossy float64 path.
 ## Known limitations (first cut)
 
 - Several context/semantic rules the spec assigns to implementations (e.g. `Load.unit`
-  conditional, `scoring`↔metric agreement) are not yet validated beyond the schema.
-- No mappers/CLI yet — this is the core (validate + normalize + runner) first.
+  conditional, `scoring`↔metric agreement) are not yet validated beyond the schema
+  (a `validateSemantics()` pass is planned).
+- No CLI yet — the library surface (validate + normalize + runner + mappers) comes first.
 
 ## Layout
 
@@ -54,4 +61,6 @@ lossy float64 path.
 | `src/canonical.ts` | number/timestamp canon + RFC 8785 serialization + set-array ordering |
 | `src/normalize.ts` | the §8.3 normalization / equivalence algorithm |
 | `src/validate.ts` | JSON Schema validation (ajv) |
+| `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
+| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple) + index |
 | `scripts/run-vectors.ts` | conformance-vector runner |
