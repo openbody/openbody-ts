@@ -72,4 +72,18 @@ check("deepCanon converts nested LosslessNumber", () => {
   assert.deepEqual(out.b[0], { coefficient: "1", exponent: "2" });
 });
 
+// --- §8.3 step 1: fixed-point-shaped objects are numeric ONLY outside extension/script ---
+check("fixed-point object collapses in a numeric field but stays structural in extension", () => {
+  // numeric-typed position: {coefficient:720, exponent:-1} = 72 → fixed-point {72, 0}
+  const numeric = deepCanon({ value: { coefficient: 720, exponent: -1 } }) as any;
+  assert.deepEqual(numeric.value, { coefficient: "72", exponent: "0" });
+  // inside extension: NOT re-read — a plain object whose number members canonicalize
+  // independently (720 → 72×10¹; -1 → -1×10⁰).
+  const opaque = deepCanon({ extension: { "x:f": { coefficient: 720, exponent: -1 } } }) as any;
+  assert.deepEqual(opaque.extension["x:f"], {
+    coefficient: { coefficient: "72", exponent: "1" },
+    exponent: { coefficient: "-1", exponent: "0" },
+  });
+});
+
 console.log(`\n${n} lossless checks passed`);

@@ -65,16 +65,27 @@ export function canonTimestamp(s: string): string {
   return t;
 }
 
-/** Recursively apply number + timestamp canonicalization across a record. */
-export function deepCanon(value: unknown, key?: string): Json {
+// Subtrees whose contents are opaque (§8): a fixed-point-shaped object inside them is a
+// plain object, NOT re-read as a number; field names there carry no spec meaning.
+const OPAQUE_KEYS = new Set(["extension", "script"]);
+
+/**
+ * Recursively apply number + timestamp canonicalization across a record (§8.3 step 1).
+ * Bare numbers are canonicalized everywhere (so JCS never float64-formats), but a
+ * `{coefficient, exponent}` *object* is collapsed to fixed-point only OUTSIDE opaque
+ * `extension`/`script` subtrees; inside them it stays a structural object, and timestamp
+ * fields aren't re-spelled (the keys aren't the spec's timestamp fields).
+ */
+export function deepCanon(value: unknown, inOpaque = false): Json {
   if (value instanceof LosslessNumber) return canonNumber(value) as unknown as Json;
   if (typeof value === "number") return canonNumber(value) as unknown as Json;
-  if (isFixedPointLike(value)) return canonNumber(value as any) as unknown as Json;
-  if (Array.isArray(value)) return value.map((v) => deepCanon(v));
+  if (!inOpaque && isFixedPointLike(value)) return canonNumber(value as any) as unknown as Json;
+  if (Array.isArray(value)) return value.map((v) => deepCanon(v, inOpaque));
   if (value && typeof value === "object") {
     const out: Record<string, Json> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = (typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v, k);
+      const childOpaque = inOpaque || OPAQUE_KEYS.has(k);
+      out[k] = (!inOpaque && typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v, childOpaque);
     }
     return out;
   }
