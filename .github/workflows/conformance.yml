@@ -1,0 +1,47 @@
+name: conformance
+
+# Runs this reference implementation against the standard's conformance vectors,
+# which live in the separate openbody/openbody repo (schema + conformance/vectors).
+# Both repos are checked out side by side and OPENBODY_STANDARD points at the standard.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout openbody-ts
+        uses: actions/checkout@v4
+        with:
+          path: openbody-ts
+
+      - name: Checkout openbody (the standard — schema + vectors)
+        uses: actions/checkout@v4
+        with:
+          repository: openbody/openbody
+          path: openbody
+          # While the standard repo is PRIVATE the default GITHUB_TOKEN cannot read it;
+          # set a STANDARD_REPO_TOKEN secret (fine-grained PAT / App token with read
+          # access to openbody/openbody). Once the repo is public the fallback works.
+          token: ${{ secrets.STANDARD_REPO_TOKEN || github.token }}
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: openbody-ts/package-lock.json
+
+      - name: Install
+        working-directory: openbody-ts
+        run: npm ci --no-audit --no-fund
+
+      - name: Conformance (typecheck + lossless + vectors)
+        working-directory: openbody-ts
+        env:
+          OPENBODY_STANDARD: ${{ github.workspace }}/openbody
+        run: npm test
