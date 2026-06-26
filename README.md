@@ -1,6 +1,6 @@
 # openbody-ts
 
-The **TypeScript reference implementation** of the [OpenBody](https://github.com/yahmad/openbody)
+The **TypeScript reference implementation** of the [OpenBody](https://github.com/openbody/openbody)
 standard — validate, canonically normalize (§8.3), and check equivalence of OpenBody
 records, plus a conformance-vector runner.
 
