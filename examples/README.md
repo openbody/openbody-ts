@@ -2,7 +2,13 @@
 
 Mapping **real export formats** into OpenBody, then validating each wire record against
 the JSON Schema and normalizing it (§8.3). This is how we find model gaps before going
-public — and a seed for the eventual mapper SDKs (launch Phase D).
+public.
+
+> **The mapping logic is now the mapper SDK** (`src/mappers/`): `mapHevy`, `mapStrong`,
+> `mapStrava`, `mapAppleHealth` — pure `input → records[]` functions, round-trip tested
+> (`npm run mappers`: every wire record validates + normalization is idempotent). The
+> scripts here are thin runners over those functions. Health Connect is covered by the
+> Apple Health mapper (identical mapping).
 
 | Source | Pillar | Result |
 |---|---|---|

@@ -8,8 +8,9 @@
   "scripts": {
     "vectors": "tsx scripts/run-vectors.ts",
     "lossless": "tsx scripts/test-lossless.ts",
+    "mappers": "tsx scripts/test-mappers.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run lossless && npm run vectors"
+    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run mappers"
   },
   "dependencies": {
     "ajv": "^8.17.1",
