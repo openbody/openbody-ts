@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { normalizeDocument, equivalent } from "../src/normalize.js";
 import { validate, standardDir } from "../src/validate.js";
+import { parseLossless } from "../src/parse.js";
 
 const vdir = path.join(standardDir, "conformance/vectors");
 const files = fs.readdirSync(vdir).filter((f) => f.endsWith(".json") && f !== "index.json").sort();
@@ -34,14 +35,16 @@ function idempotent(doc: any): boolean {
 
 console.log(`OpenBody-TS conformance run (standard: ${standardDir})\n`);
 for (const f of files) {
-  const v = JSON.parse(fs.readFileSync(path.join(vdir, f), "utf8"));
+  const text = fs.readFileSync(path.join(vdir, f), "utf8");
+  const v = JSON.parse(text);              // plain parse: metadata + schema validation
+  const vL = parseLossless(text) as any;   // lossless parse: documents for §8.3 normalization
   const name = `${v.name} [${v.kind}]`;
   try {
     if (v.kind === "valid") {
       const e = allValid(v.record);
       if (e) { bad(name, e); continue; }
-      normalizeDocument(v.record);
-      if (!idempotent(v.record)) { bad(name, "normalization not idempotent"); continue; }
+      normalizeDocument(vL.record);
+      if (!idempotent(vL.record)) { bad(name, "normalization not idempotent"); continue; }
       ok(name);
     } else if (v.kind === "invalid") {
       const e = allValid(v.record);
@@ -50,14 +53,14 @@ for (const f of files) {
       const ea = allValid(v.a), eb = allValid(v.b);
       if (ea) { bad(name, `a ${ea}`); continue; }
       if (eb) { bad(name, `b ${eb}`); continue; }
-      if (equivalent(v.a, v.b)) ok(name);
+      if (equivalent(vL.a, vL.b)) ok(name);
       else {
         bad(name, "a and b are NOT equivalent");
-        console.log("       a:", normalizeDocument(v.a));
-        console.log("       b:", normalizeDocument(v.b));
+        console.log("       a:", normalizeDocument(vL.a));
+        console.log("       b:", normalizeDocument(vL.b));
       }
     } else if (v.kind === "normalization") {
-      const recs = normalizeDocument(v.input);
+      const recs = normalizeDocument(vL.input);
       if (Array.isArray(v.expected)) {
         const match = recs.length === v.expected.length && recs.every((s, i) => s === v.expected[i]);
         if (match) ok(`${name} (${recs.length} records, exact match)`);

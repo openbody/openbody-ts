@@ -7,7 +7,9 @@
   "license": "Apache-2.0",
   "scripts": {
     "vectors": "tsx scripts/run-vectors.ts",
-    "typecheck": "tsc --noEmit"
+    "lossless": "tsx scripts/test-lossless.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && npm run lossless && npm run vectors"
   },
   "dependencies": {
     "ajv": "^8.17.1",

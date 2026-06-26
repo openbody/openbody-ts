@@ -1,5 +1,6 @@
 // Canonicalization primitives for OpenBody §8.3.
 import canonicalizeMod from "canonicalize";
+import { LosslessNumber } from "./parse.js";
 // canonicalize is CJS (module.exports = fn); cast fixes NodeNext default-import types.
 const canonicalize = canonicalizeMod as unknown as (v: unknown) => string | undefined;
 
@@ -9,22 +10,27 @@ export interface FixedPoint { coefficient: string; exponent: string }
 const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"]);
 
 /**
- * Step 1 (numbers): reduce any numeric value — a JS number or a {coefficient,exponent}
- * object — to lowest-terms fixed-point with string coefficient/exponent (§8.3).
+ * Step 1 (numbers): reduce any numeric value to lowest-terms fixed-point with string
+ * coefficient/exponent (§8.3). Accepts a {@link LosslessNumber} (exact source decimal,
+ * the spec-correct input), a fixed-point `{coefficient, exponent}` object, or — as a
+ * lossy fallback for callers that pre-parsed with `JSON.parse` — a JS number.
  *
- * NOTE / known limitation: JSON.parse already coerced source numbers to float64, so
- * very high-precision decimals can lose their exact source text. A fully spec-correct
- * implementation parses the raw JSON number text (e.g. a lossless parser). For typical
- * fitness data this round-trips exactly; tracked as a TODO.
+ * For full §8.3 fidelity, parse documents with {@link parseLossless} so numbers arrive
+ * as `LosslessNumber`; the plain-number path can lose precision above 2^53 or for
+ * high-precision decimals.
  */
-export function canonNumber(n: number | { coefficient: unknown; exponent: unknown }): FixedPoint {
+export function canonNumber(
+  n: number | LosslessNumber | { coefficient: unknown; exponent: unknown },
+): FixedPoint {
   let coeff: bigint;
   let exp: number;
-  if (typeof n === "number") {
+  if (n instanceof LosslessNumber) {
+    [coeff, exp] = decimalParts(n.value);
+  } else if (typeof n === "number") {
     [coeff, exp] = decimalParts(n.toString());
   } else {
     coeff = BigInt(String((n as any).coefficient).trim());
-    exp = Number((n as any).exponent);
+    exp = Number(String((n as any).exponent).trim());
   }
   if (coeff === 0n) return { coefficient: "0", exponent: "0" };
   const negative = coeff < 0n;
@@ -60,18 +66,19 @@ export function canonTimestamp(s: string): string {
 }
 
 /** Recursively apply number + timestamp canonicalization across a record. */
-export function deepCanon(value: Json, key?: string): Json {
+export function deepCanon(value: unknown, key?: string): Json {
+  if (value instanceof LosslessNumber) return canonNumber(value) as unknown as Json;
   if (typeof value === "number") return canonNumber(value) as unknown as Json;
   if (isFixedPointLike(value)) return canonNumber(value as any) as unknown as Json;
   if (Array.isArray(value)) return value.map((v) => deepCanon(v));
   if (value && typeof value === "object") {
     const out: Record<string, Json> = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = (typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v as Json, k);
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = (typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v, k);
     }
     return out;
   }
-  return value;
+  return value as Json;
 }
 
 /** Step 9: order the set-valued arrays per §8.3 (key order, then canonical-byte tiebreak). */

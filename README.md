@@ -32,12 +32,17 @@ The vector runner and validator read the standard (schema + vectors) from a sibl
 checkout (default `../openbody`); override with `OPENBODY_STANDARD=/path/to/openbody`.
 When published, the SDK will instead bundle/depend on a versioned schema package.
 
+## Number parsing (§8.3 step 1)
+
+JSON numbers are parsed **losslessly** from their decimal text (`parseLossless` →
+`LosslessNumber`), never via `float64`, before fixed-point canonicalization — so
+high-precision decimals and integers above 2^53 canonicalize to their exact value
+(`npm run lossless` proves it). Feed documents through `parseLossless` (or raw text)
+for full §8.3 fidelity; passing a value pre-parsed with `JSON.parse` falls back to the
+lossy float64 path.
+
 ## Known limitations (first cut)
 
-- **Number parsing.** JSON numbers are read via `JSON.parse` (float64) before
-  fixed-point canonicalization, so pathological high-precision decimals could lose
-  their exact source text (§8.3 step 1 mandates decimal-text parsing). Typical fitness
-  data round-trips exactly; full correctness via a lossless JSON number parser is a TODO.
 - Several context/semantic rules the spec assigns to implementations (e.g. `Load.unit`
   conditional, `scoring`↔metric agreement) are not yet validated beyond the schema.
 - No mappers/CLI yet — this is the core (validate + normalize + runner) first.

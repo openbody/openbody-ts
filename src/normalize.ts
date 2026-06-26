@@ -2,6 +2,7 @@
 // Reduces a document (a record or array of records) to a sorted set of canonical
 // record byte strings. Two documents are equivalent iff these sets are equal.
 import { canonicalString, deepCanon, type Json } from "./canonical.js";
+import { LosslessNumber } from "./parse.js";
 
 type Rec = Record<string, any>;
 
@@ -19,7 +20,22 @@ const METRIC_DEFAULT_UNIT: Record<string, string | null> = {
 };
 const PRESCRIPTION_METRICS = ["reps", "time", "distance", "energy", "rest"];
 
-const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+// Deep clone that preserves LosslessNumber instances (a plain JSON round-trip would
+// destroy them). LosslessNumber is immutable, so the same instance can be shared.
+function clone<T>(x: T): T {
+  if (x instanceof LosslessNumber) return x;
+  if (Array.isArray(x)) return x.map(clone) as unknown as T;
+  if (x && typeof x === "object") {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(x)) out[k] = clone(v);
+    return out as T;
+  }
+  return x;
+}
+
+function isScalarNumber(v: any): boolean {
+  return typeof v === "number" || v instanceof LosslessNumber || isFixedPointWire(v);
+}
 
 function isFixedPointWire(v: any): boolean {
   return v && typeof v === "object" && !Array.isArray(v)
@@ -29,7 +45,7 @@ function isFixedPointWire(v: any): boolean {
 // Expand a scalar metric to {absolute:{value}}; strip a unit equal to the field default.
 function expandMetric(field: string, v: any): any {
   if (v === null || v === undefined) return v;
-  if (typeof v === "number" || isFixedPointWire(v)) return { absolute: { value: v } };
+  if (isScalarNumber(v)) return { absolute: { value: v } };
   if (typeof v === "object") {
     const def = METRIC_DEFAULT_UNIT[field];
     if (def) {
@@ -45,7 +61,7 @@ function transformMetricsObj(obj: Rec | undefined): void {
   for (const f of PRESCRIPTION_METRICS) if (f in obj) obj[f] = expandMetric(f, obj[f]);
   if (obj.load && typeof obj.load === "object") {
     const load = obj.load;
-    if (typeof load.value === "number" || isFixedPointWire(load.value)) {
+    if (isScalarNumber(load.value)) {
       load.value = { absolute: { value: load.value } };
     } else if (load.value?.absolute) {
       if (load.value.absolute.unit !== undefined && load.unit === undefined) load.unit = load.value.absolute.unit;
@@ -82,7 +98,9 @@ function expandSets(arr: any[]): any[] {
   const out: any[] = [];
   for (const item of arr) {
     const p = item?.recordType === "WorkUnit" ? item.prescription : undefined;
-    const n = p && typeof p.sets === "number" ? p.sets : undefined;
+    const raw = p ? p.sets : undefined;
+    const n = raw instanceof LosslessNumber ? Number(raw.value)
+      : typeof raw === "number" ? raw : undefined;
     if (n && n >= 1) {
       if (item.performance !== undefined) throw new Error(`WorkUnit ${item.id ?? "?"}: sets+performance is invalid (§5.5)`);
       const first = clone(item); delete first.prescription.sets; out.push(first);
