@@ -96,6 +96,7 @@ export function deepCanon(value: unknown, inOpaque = false): Json {
 const SET_ARRAY_KEYS: Record<string, string[]> = {
   links: ["type", "ref"],
   effortLoad: ["kind", "method"],
+  intensity: ["dimension"],
   modifiers: ["type"],
 };
 

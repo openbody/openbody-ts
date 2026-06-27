@@ -73,6 +73,19 @@ function transformMetricsObj(obj: Rec | undefined): void {
       delete load.value.absolute.unit;
     }
   }
+  // Intensity entries carry a scalar-or-Target `value` with the unit on the sibling
+  // (like Load); `zone` entries have no value. Mirror the Load expansion.
+  if (Array.isArray(obj.intensity)) {
+    for (const it of obj.intensity) {
+      if (!it || typeof it !== "object") continue;
+      if (isScalarNumber(it.value)) {
+        it.value = { absolute: { value: it.value } };
+      } else if (it.value?.absolute) {
+        if (it.value.absolute.unit !== undefined && it.unit === undefined) it.unit = it.value.absolute.unit;
+        delete it.value.absolute.unit;
+      }
+    }
+  }
   // effortLoad values are plain numbers — number canon (deepCanon) handles them.
 }
 
