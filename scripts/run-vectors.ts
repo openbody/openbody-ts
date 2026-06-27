@@ -7,8 +7,19 @@ import { normalizeDocument, equivalent } from "../src/normalize.js";
 import { validate, standardDir } from "../src/validate.js";
 import { parseLossless } from "../src/parse.js";
 
-const vdir = path.join(standardDir, "conformance/vectors");
-const files = fs.readdirSync(vdir).filter((f) => f.endsWith(".json") && f !== "index.json").sort();
+// The minimum-core conformance vectors plus the extended activity-coverage corpus
+// (SPEC §8.3). The corpus is coverage validation, not a conformance bar — but its
+// records must still validate and round-trip, so we run it through the same checks.
+const dirs = [
+  { label: "vectors", path: path.join(standardDir, "conformance/vectors") },
+  { label: "corpus", path: path.join(standardDir, "conformance/corpus") },
+];
+const files = dirs.flatMap((d) =>
+  fs.existsSync(d.path)
+    ? fs.readdirSync(d.path).filter((f) => f.endsWith(".json") && f !== "index.json").sort()
+        .map((f) => ({ label: d.label, dir: d.path, file: f }))
+    : [],
+);
 
 let pass = 0;
 let fail = 0;
@@ -34,8 +45,10 @@ function idempotent(doc: any): boolean {
 }
 
 console.log(`OpenBody-TS conformance run (standard: ${standardDir})\n`);
-for (const f of files) {
-  const text = fs.readFileSync(path.join(vdir, f), "utf8");
+let lastLabel = "";
+for (const { label, dir, file: f } of files) {
+  if (label !== lastLabel) { console.log(`\n# ${label}`); lastLabel = label; }
+  const text = fs.readFileSync(path.join(dir, f), "utf8");
   const v = JSON.parse(text);              // plain parse: metadata + schema validation
   const vL = parseLossless(text) as any;   // lossless parse: documents for §8.3 normalization
   const name = `${v.name} [${v.kind}]`;
