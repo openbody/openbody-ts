@@ -20,6 +20,11 @@ const METRIC_DEFAULT_UNIT: Record<string, string | null> = {
 };
 const PRESCRIPTION_METRICS = ["reps", "time", "distance", "energy", "rest"];
 
+// §5.8 primary metric per WorkUnit.scoring kind (continuous has none → skipped).
+const SCORING_PRIMARY_METRIC: Record<string, string> = {
+  reps: "reps", time: "time", distance: "distance", energy: "energy",
+};
+
 // Deep clone that preserves LosslessNumber instances (a plain JSON round-trip would
 // destroy them). LosslessNumber is immutable, so the same instance can be shared.
 function clone<T>(x: T): T {
@@ -93,6 +98,56 @@ function addPartOf(rec: Rec, parentId: string): void {
   }
 }
 
+// Recursively strip ids from a copied subtree (§8.3 step 5: roundScheme copies 2..n).
+function stripIds(rec: Rec): void {
+  delete rec.id;
+  for (const field of CONTAINERS[rec?.recordType] || []) {
+    if (Array.isArray(rec[field])) for (const c of rec[field]) stripIds(c);
+  }
+}
+
+// Inject a round's value into each descendant WorkUnit whose primary metric is absent
+// (§5.4/§5.8). Stops at a nested Block that carries its own roundScheme (it injects its
+// own). The value lands in `prescription` — roundScheme is a planned shorthand.
+function injectRoundMetric(rec: Rec, value: any): void {
+  if (rec?.recordType === "WorkUnit") {
+    const metric = SCORING_PRIMARY_METRIC[rec.scoring];
+    if (metric) {
+      const p = rec.prescription || (rec.prescription = {});
+      if (p[metric] === undefined) p[metric] = value;
+    }
+  }
+  for (const field of CONTAINERS[rec?.recordType] || []) {
+    if (!Array.isArray(rec[field])) continue;
+    for (const c of rec[field]) {
+      if (c?.recordType === "Block" && c.roundScheme !== undefined) continue;
+      injectRoundMetric(c, value);
+    }
+  }
+}
+
+// §8.3 step 5: expand `Block.roundScheme:[v1..vn]` into n in-order copies of `children`;
+// copy r injects vr into ladder-following WorkUnits; copies 2..n are id-less.
+function expandRoundScheme(block: Rec): void {
+  const rs = block.roundScheme;
+  if (rs === undefined) return;
+  const where = block.id ?? "?";
+  if (block.repetitions !== undefined) throw new Error(`Block ${where}: roundScheme+repetitions is invalid (§5.4)`);
+  if (block.performance !== undefined) throw new Error(`Block ${where}: roundScheme+performance is invalid (§5.4)`);
+  const src: any[] = Array.isArray(block.children) ? block.children : [];
+  const out: any[] = [];
+  rs.forEach((v: any, r: number) => {
+    for (const child of src) {
+      const c = clone(child);
+      injectRoundMetric(c, v);
+      if (r > 0) stripIds(c);
+      out.push(c);
+    }
+  });
+  block.children = out;
+  delete block.roundScheme;
+}
+
 // §8.3 step 5: expand `sets:N` into N WorkUnits (1st keeps id+position; rest id-less, after).
 function expandSets(arr: any[]): any[] {
   const out: any[] = [];
@@ -132,6 +187,8 @@ function flatten(rec: Rec, ctx: Ctx, out: Rec[]): void {
   if (rec.recordType === "Block" && rec.performance && "time" in rec.performance) {
     rec.performance.time = expandMetric("time", rec.performance.time);
   }
+
+  if (rec.recordType === "Block") expandRoundScheme(rec);
 
   const childCtx: Ctx = { subject: rec.subject, startTime: rec.startTime, endTime: rec.endTime };
   for (const field of CONTAINERS[rec.recordType] || []) {
