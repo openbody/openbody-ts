@@ -100,13 +100,22 @@ const SET_ARRAY_KEYS: Record<string, string[]> = {
   modifiers: ["type"],
 };
 
+// Set-valued arrays of plain scalar tokens (no element keys) — ordered by token value.
+const SET_ARRAY_SCALARS = new Set(["qualities"]);
+
 function orderSetArrays(value: Json): Json {
   if (Array.isArray(value)) return value.map(orderSetArrays);
   if (value && typeof value === "object") {
     const out: Record<string, Json> = {};
     for (const [k, v] of Object.entries(value)) {
       let nv = orderSetArrays(v as Json);
-      if (Array.isArray(nv) && k in SET_ARRAY_KEYS) {
+      if (Array.isArray(nv) && SET_ARRAY_SCALARS.has(k)) {
+        nv = [...nv].sort((a, b) => {
+          const as = String(a);
+          const bs = String(b);
+          return as < bs ? -1 : as > bs ? 1 : 0;
+        });
+      } else if (Array.isArray(nv) && k in SET_ARRAY_KEYS) {
         const keys = SET_ARRAY_KEYS[k];
         nv = [...nv].sort((a, b) => {
           for (const kk of keys) {
