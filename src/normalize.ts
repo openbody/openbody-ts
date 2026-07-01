@@ -83,6 +83,9 @@ function transformMetricsObj(obj: Rec | undefined): void {
       } else if (it.value?.absolute) {
         if (it.value.absolute.unit !== undefined && it.unit === undefined) it.unit = it.value.absolute.unit;
         delete it.value.absolute.unit;
+      } else if (it.value?.range) {
+        if (it.value.range.unit !== undefined && it.unit === undefined) it.unit = it.value.range.unit;
+        delete it.value.range.unit;
       }
     }
   }
