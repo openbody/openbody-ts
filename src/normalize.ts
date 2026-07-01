@@ -79,6 +79,9 @@ function transformMetricsObj(obj: Rec | undefined): void {
     } else if (load.value?.absolute) {
       if (load.value.absolute.unit !== undefined && load.unit === undefined) load.unit = load.value.absolute.unit;
       delete load.value.absolute.unit;
+    } else if (load.value?.range) {
+      if (load.value.range.unit !== undefined && load.unit === undefined) load.unit = load.value.range.unit;
+      delete load.value.range.unit;
     } else if (load.value?.ramp) {
       // Fold `ramp.unit` to the sibling `Load.unit`, mirroring the `absolute` case above —
       // `from`/`to` themselves are never touched (§5.10, order-significant).
