@@ -98,6 +98,7 @@ const SET_ARRAY_KEYS: Record<string, string[]> = {
   effortLoad: ["kind", "method"],
   intensity: ["dimension"],
   modifiers: ["type"],
+  media: ["url"],
 };
 
 // Set-valued arrays of plain scalar tokens (no element keys) — ordered by token value.

@@ -67,6 +67,11 @@ function expandMetric(field: string, v: any): any {
 function transformMetricsObj(obj: Rec | undefined): void {
   if (!obj) return;
   for (const f of PRESCRIPTION_METRICS) if (f in obj) obj[f] = expandMetric(f, obj[f]);
+  // `sides.restBetween` is scalar-or-Target with the same default unit ("s") as
+  // `rest` (§5.5, §5.10) — reuse expandMetric under the "rest" default-unit key.
+  if (obj.sides && typeof obj.sides === "object" && "restBetween" in obj.sides) {
+    obj.sides.restBetween = expandMetric("rest", obj.sides.restBetween);
+  }
   if (obj.load && typeof obj.load === "object") {
     const load = obj.load;
     if (isScalarNumber(load.value)) {
