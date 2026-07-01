@@ -4,8 +4,9 @@ The **TypeScript reference implementation** of the [OpenBody](https://github.com
 standard — validate, canonically normalize (§8.3), and check equivalence of OpenBody
 records, plus a conformance-vector runner.
 
-> Status: early (v0.1.0), tracks OpenBody spec **v0.3.x**. A reference implementation
-> is *one* implementation, not normative — `SPEC.md` is the source of truth.
+> Status: early (v0.1.0), tracks the **current pre-v1.0 OpenBody draft** (see the standard's
+> `CHANGELOG.md`). A reference implementation is *one* implementation, not normative —
+> `SPEC.md` is the source of truth.
 > **Licensed Apache-2.0** (the standard itself is OWFa-1.0; kept in a separate repo).
 
 ## What it does
