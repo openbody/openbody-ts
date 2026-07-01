@@ -56,6 +56,9 @@ function expandMetric(field: string, v: any): any {
     if (def) {
       if (v.absolute && v.absolute.unit === def) delete v.absolute.unit;
       if (v.range && v.range.unit === def) delete v.range.unit;
+      // `ramp.from`/`ramp.to` are directional and never reordered (§5.10) — only its
+      // `unit` is default-stripped here, exactly like absolute/range.
+      if (v.ramp && v.ramp.unit === def) delete v.ramp.unit;
     }
   }
   return v;
@@ -71,6 +74,11 @@ function transformMetricsObj(obj: Rec | undefined): void {
     } else if (load.value?.absolute) {
       if (load.value.absolute.unit !== undefined && load.unit === undefined) load.unit = load.value.absolute.unit;
       delete load.value.absolute.unit;
+    } else if (load.value?.ramp) {
+      // Fold `ramp.unit` to the sibling `Load.unit`, mirroring the `absolute` case above —
+      // `from`/`to` themselves are never touched (§5.10, order-significant).
+      if (load.value.ramp.unit !== undefined && load.unit === undefined) load.unit = load.value.ramp.unit;
+      delete load.value.ramp.unit;
     }
   }
   // Intensity entries carry a scalar-or-Target `value` with the unit on the sibling
@@ -86,6 +94,11 @@ function transformMetricsObj(obj: Rec | undefined): void {
       } else if (it.value?.range) {
         if (it.value.range.unit !== undefined && it.unit === undefined) it.unit = it.value.range.unit;
         delete it.value.range.unit;
+      } else if (it.value?.ramp) {
+        // Fold `ramp.unit` to the sibling `Intensity.unit`, mirroring absolute/range —
+        // `from`/`to` are directional (§5.10) and are never reordered/touched here.
+        if (it.value.ramp.unit !== undefined && it.unit === undefined) it.unit = it.value.ramp.unit;
+        delete it.value.ramp.unit;
       }
     }
   }
