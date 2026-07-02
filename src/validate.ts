@@ -168,14 +168,33 @@ function checkTombstone(rec: Record<string, any>): string[] {
   return [];
 }
 
+// §5.5 a WorkUnit's exerciseRef is mutually exclusive with an enclosing Exercise:
+// Exercise.workUnits are always direct children (Exercise's only container, per
+// CONTAINERS), so "enclosing" here is just "this Exercise's own workUnits array" —
+// no recursive context-tracking needed.
+function checkExerciseRefEnclosing(rec: Record<string, any>): string[] {
+  if (rec.recordType !== "Exercise" || !Array.isArray(rec.workUnits)) return [];
+  const errors: string[] = [];
+  for (const wu of rec.workUnits) {
+    if (wu && typeof wu === "object" && wu.exerciseRef !== undefined) {
+      errors.push(
+        `WorkUnit ${wu.id ?? "?"} carries exerciseRef but its enclosing Exercise ${rec.id ?? "?"} already carries one (§5.5)`,
+      );
+    }
+  }
+  return errors;
+}
+
 // Intra-record semantic rules the schema can't express (context-dependent, not a
 // fixed shape): Load.unit's conditional requirement, scoring↔metric agreement,
-// sets+performance mutual exclusion, and the tombstone-only-field rule. Walks the
-// whole inlined-record tree under `record` (§5.1), not just the top-level record.
+// sets+performance mutual exclusion, the tombstone-only-field rule, and
+// exerciseRef/enclosing-Exercise mutual exclusion. Walks the whole inlined-record
+// tree under `record` (§5.1), not just the top-level record.
 function validateSemantics(record: Record<string, any>): string[] {
   const errors: string[] = [];
   forEachRecord(record, (rec) => {
     errors.push(...checkTombstone(rec));
+    errors.push(...checkExerciseRefEnclosing(rec));
     if (rec.recordType === "WorkUnit") {
       if (rec.prescription?.load) {
         errors.push(...checkLoadUnit(rec.prescription.load, `WorkUnit ${rec.id ?? "?"} prescription.load`));
