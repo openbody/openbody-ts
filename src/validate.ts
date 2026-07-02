@@ -1,20 +1,38 @@
 // Schema validation against the published OpenBody JSON Schema (§§4-7).
-// During local development the schema is read from the sibling standard repo
-// (default ../openbody, override with OPENBODY_STANDARD). When this SDK is
-// published it will bundle/depend on a versioned schema artifact instead.
+// `standardDir` (a full sibling-repo checkout, default ../openbody, override with
+// OPENBODY_STANDARD) is what the conformance-vector runner and test scripts need —
+// dev/test-only, never shipped in the published package. The schema itself is
+// resolved separately: OPENBODY_STANDARD wins if set (so iterating on an unmerged
+// spec change works without re-syncing); otherwise this prefers the vendored copy
+// this package ships (`vendor/openbody.schema.json`, refreshed from the sibling
+// repo by `npm run sync-schema`, run automatically pre-pack/publish), falling back
+// to the sibling-repo path only if the vendored copy hasn't been synced yet (e.g. a
+// fresh clone before the first build). Both paths are resolved relative to this
+// module's own location, not `process.cwd()` — a consumer importing this package
+// from an arbitrary working directory must still find the schema.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Ajv2020Mod from "ajv/dist/2020.js";
 import addFormatsMod from "ajv-formats";
 // ajv / ajv-formats are CJS; casts fix NodeNext default-import types (runtime is fine).
 const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>): any };
 const addFormats = addFormatsMod as unknown as (ajv: any) => void;
 
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 export const standardDir = process.env.OPENBODY_STANDARD
   ? path.resolve(process.env.OPENBODY_STANDARD)
-  : path.resolve(process.cwd(), "../openbody");
+  : path.resolve(packageRoot, "../openbody");
 
-const schema = JSON.parse(fs.readFileSync(path.join(standardDir, "schema/openbody.schema.json"), "utf8"));
+const vendoredSchemaPath = path.join(packageRoot, "vendor/openbody.schema.json");
+const schemaPath = process.env.OPENBODY_STANDARD
+  ? path.join(standardDir, "schema/openbody.schema.json")
+  : fs.existsSync(vendoredSchemaPath)
+    ? vendoredSchemaPath
+    : path.join(standardDir, "schema/openbody.schema.json");
+
+const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const _validate = ajv.compile(schema);

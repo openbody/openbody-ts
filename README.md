@@ -23,7 +23,19 @@ records, plus a conformance-vector runner.
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
 
-## Use
+## Install (as a dependency)
+
+Not yet published to npm (`OB-11` — packaging is ready; publish itself is a
+deliberate, separate action gated on the project's go-public timing). Once
+published: `npm install @openbody/openbody-ts`, then `import { validate, normalizeDocument, equivalent } from "@openbody/openbody-ts"`.
+
+The published package **vendors a schema snapshot** (`vendor/openbody.schema.json`,
+refreshed from the sibling `openbody` repo by `npm run sync-schema`, which runs
+automatically pre-pack/publish) — it does not depend on a sibling checkout at
+runtime. `npm run build` compiles `src/` to `dist/` (ESM + `.d.ts`); `npm pack
+--dry-run` shows exactly what ships (`dist/`, `vendor/`, `README.md`, `LICENSE`).
+
+## Develop this repo
 
 ```bash
 npm install
@@ -33,11 +45,15 @@ npm run vectors    # run the standard's conformance vectors against this impl
 npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple) round-trip
 npm run lossless   # §8.3 lossless-number checks
 npm run typecheck
+npm run build      # compile src/ -> dist/
 ```
 
-The vector runner and validator read the standard (schema + vectors) from a sibling
-checkout (default `../openbody`); override with `OPENBODY_STANDARD=/path/to/openbody`.
-When published, the SDK will instead bundle/depend on a versioned schema package.
+The vector runner (dev/test-only, not shipped) reads the standard (schema + vectors)
+from a sibling checkout (default `../openbody`); override with
+`OPENBODY_STANDARD=/path/to/openbody`. Schema *validation* prefers the vendored
+snapshot when present (run `npm run sync-schema` to refresh it), falling back to the
+sibling-repo path otherwise — so `OPENBODY_STANDARD` also lets you validate against
+an unmerged local spec change without re-syncing.
 
 ## Number parsing (§8.3 step 1)
 
@@ -50,9 +66,6 @@ lossy float64 path.
 
 ## Known limitations (first cut)
 
-- Several context/semantic rules the spec assigns to implementations (e.g. `Load.unit`
-  conditional, `scoring`↔metric agreement) are not yet validated beyond the schema
-  (a `validateSemantics()` pass is planned).
 - No CLI yet — the library surface (validate + normalize + runner + mappers) comes first.
 
 ## Layout
@@ -65,3 +78,5 @@ lossy float64 path.
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
 | `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple) + index |
 | `scripts/run-vectors.ts` | conformance-vector runner |
+| `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |
+| `vendor/` | gitignored; populated by `sync-schema`, shipped in the published package |

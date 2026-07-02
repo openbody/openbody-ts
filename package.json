@@ -1,16 +1,51 @@
 {
   "name": "@openbody/openbody-ts",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "OpenBody reference implementation (TypeScript): validate + §8.3 canonical normalize + conformance vector runner. Apache-2.0.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openbody/openbody-ts.git"
+  },
+  "homepage": "https://github.com/openbody/openbody-ts#readme",
+  "bugs": {
+    "url": "https://github.com/openbody/openbody-ts/issues"
+  },
+  "keywords": [
+    "openbody",
+    "fitness",
+    "health",
+    "interoperability",
+    "json-schema"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "vectors": "tsx scripts/run-vectors.ts",
     "lossless": "tsx scripts/test-lossless.ts",
     "mappers": "tsx scripts/test-mappers.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run mappers"
+    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run mappers",
+    "sync-schema": "node scripts/sync-schema.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run sync-schema && npm run build"
   },
   "dependencies": {
     "ajv": "^8.17.1",
