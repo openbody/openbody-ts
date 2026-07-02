@@ -56,7 +56,10 @@ from a sibling checkout (default `../openbody`); override with
 `OPENBODY_STANDARD=/path/to/openbody`. Schema *validation* prefers the vendored
 snapshot when present (run `npm run sync-schema` to refresh it), falling back to the
 sibling-repo path otherwise — so `OPENBODY_STANDARD` also lets you validate against
-an unmerged local spec change without re-syncing.
+an unmerged local spec change without re-syncing. This `OPENBODY_STANDARD`-aware
+resolution lives in `src/schema-loader-node.ts`, a Node-only module kept separate
+from `src/validate.ts` (and never re-exported from `src/index.ts`) so importing the
+package's main entry point stays safe to bundle for a browser — see the Layout table.
 
 ## Number parsing (§8.3 step 1)
 
@@ -77,7 +80,8 @@ lossy float64 path.
 |---|---|
 | `src/canonical.ts` | number/timestamp canon + RFC 8785 serialization + set-array ordering |
 | `src/normalize.ts` | the §8.3 normalization / equivalence algorithm |
-| `src/validate.ts` | JSON Schema validation (ajv) |
+| `src/validate.ts` | JSON Schema validation (ajv), browser-safe — validates against the vendored schema, no `node:*` imports |
+| `src/schema-loader-node.ts` | Node-only: `OPENBODY_STANDARD`-aware schema resolution + `standardDir`, used by dev/test scripts; not exported from `src/index.ts` |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
 | `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index; `to-strong.ts` is the reverse (OpenBody → Strong CSV) mapper |
 | `scripts/run-vectors.ts` | conformance-vector runner |

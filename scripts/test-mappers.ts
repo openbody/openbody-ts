@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../src/validate.js";
+import { validate } from "../src/schema-loader-node.js";
 import { normalizeDocument, equivalent } from "../src/normalize.js";
 import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong, parseCsv } from "../src/mappers/index.js";
 

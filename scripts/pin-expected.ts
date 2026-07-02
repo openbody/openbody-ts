@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeDocument } from "../src/normalize.js";
-import { standardDir } from "../src/validate.js";
+import { standardDir } from "../src/schema-loader-node.js";
 import { parseLossless } from "../src/parse.js";
 
 const vdir = path.join(standardDir, "conformance/vectors");
