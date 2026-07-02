@@ -7,4 +7,6 @@ export { mapStrong } from "./strong.js";
 export { mapStrava, type StravaInput } from "./strava.js";
 export { mapAppleHealth } from "./apple-health.js";
 export { mapFit, type FitInput } from "./fit.js";
+// Outbound (OpenBody → incumbent): the mirror direction, currently just Strong.
+export { mapOpenBodyToStrong } from "./to-strong.js";
 export { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";

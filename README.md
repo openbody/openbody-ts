@@ -19,7 +19,9 @@ records, plus a conformance-vector runner.
 - **`equivalent(a, b)`** — true iff two documents normalize to the same set.
 - **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health,
   FIT; Health Connect via the Apple mapper): pure functions with round-trip tests
-  (`npm run mappers`).
+  (`npm run mappers`). Plus one outbound mapper, OpenBody → Strong CSV
+  (`mapOpenBodyToStrong`), for the reverse direction (resistance-training `reps` sets only —
+  see `src/mappers/to-strong.ts` for v1 scope).
 
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
@@ -77,7 +79,7 @@ lossy float64 path.
 | `src/normalize.ts` | the §8.3 normalization / equivalence algorithm |
 | `src/validate.ts` | JSON Schema validation (ajv) |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
-| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index |
+| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index; `to-strong.ts` is the reverse (OpenBody → Strong CSV) mapper |
 | `scripts/run-vectors.ts` | conformance-vector runner |
 | `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |
 | `vendor/` | gitignored; populated by `sync-schema`, shipped in the published package |

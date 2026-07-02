@@ -5,8 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate } from "../src/validate.js";
-import { normalizeDocument } from "../src/normalize.js";
-import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit } from "../src/mappers/index.js";
+import { normalizeDocument, equivalent } from "../src/normalize.js";
+import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong, parseCsv } from "../src/mappers/index.js";
 
 const ex = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../examples");
 const read = (p: string) => fs.readFileSync(path.join(ex, p), "utf8");
@@ -37,5 +37,34 @@ for (const c of cases) {
   else console.log(`  ok   ${c.name} — ${c.records.length} wire records validate; ${n1.length} canonical (round-trip stable)`);
 }
 
-console.log(`\n${cases.length - fail}/${cases.length} mappers pass`);
+// Outbound round-trip: mapOpenBodyToStrong is the mirror of mapStrong. v1 only covers
+// `scoring: "reps"` sets (see to-strong.ts header), so derive a representative Strong sample
+// from the real fixture, keeping just its reps-based rows (drops the Plank/time-based row).
+let total = cases.length;
+{
+  const name = "to-strong (outbound)";
+  total++;
+  const errs: string[] = [];
+  const fullRows = parseCsv(read("strong/strong-sample.csv"));
+  const repsRows = fullRows.filter((r) => Number(r.Reps) > 0);
+  const header = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No";
+  const cols = ["Date", "Workout Name", "Duration", "Exercise Name", "Set Order", "Weight", "Reps", "Distance", "Seconds", "Notes", "Workout No"];
+  const strongCsv = [header, ...repsRows.map((r) => cols.map((c) => r[c]).join(","))].join("\n") + "\n";
+
+  const original = mapStrong(strongCsv);
+  const outCsv = mapOpenBodyToStrong(original);
+  const roundTripped = mapStrong(outCsv);
+
+  if (original.length === 0) errs.push("derived reps-only fixture mapped 0 records");
+  for (const r of roundTripped) {
+    const v = validate(r);
+    if (!v.valid) errs.push(`round-tripped wire ${r.recordType} ${r.id}: ${v.errors}`);
+  }
+  if (!equivalent(original, roundTripped)) errs.push("outbound round-trip (Strong → OpenBody → Strong → OpenBody) not equivalent");
+
+  if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
+  else console.log(`  ok   ${name} — ${original.length} sessions/exercises/work units round-trip through Strong CSV`);
+}
+
+console.log(`\n${total - fail}/${total} mappers pass`);
 if (fail) process.exit(1);
