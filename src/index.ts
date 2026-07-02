@@ -6,6 +6,10 @@ export { validate } from "./validate.js";
 // stays safe in a browser bundle (no node:fs/node:path/node:url in the module graph).
 export { canonicalString, canonNumber, canonTimestamp, deepCanon } from "./canonical.js";
 export { parseLossless, LosslessNumber } from "./parse.js";
+// §6.5 producer-side matching ladder: raw app exercise names → canonical registry ids
+// (browser-safe: backed by the vendored registry snapshot, see src/resolve.ts).
+export { resolveExerciseRef, sourceNameForId } from "./resolve.js";
+export type { ResolvedExerciseRef, ResolveOptions } from "./resolve.js";
 export { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong } from "./mappers/index.js";
 export type { OpenBodyRecord, MapOptions } from "./mappers/index.js";
 export type { Json, FixedPoint } from "./canonical.js";

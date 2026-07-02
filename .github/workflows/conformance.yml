@@ -30,6 +30,14 @@ jobs:
           token: ${{ secrets.STANDARD_REPO_TOKEN || github.token }}
           ref: main
 
+      - name: Checkout openbody-registry (exercise-name crosswalk data)
+        uses: actions/checkout@v4
+        with:
+          repository: openbody/openbody-registry
+          path: openbody-registry
+          token: ${{ secrets.STANDARD_REPO_TOKEN || github.token }}
+          ref: main
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -40,7 +48,16 @@ jobs:
         working-directory: openbody-ts
         run: npm ci --no-audit --no-fund
 
-      - name: Conformance (typecheck + lossless + vectors)
+      - name: Vendor data snapshots (schema + crosswalk — gitignored, sibling-sourced)
+        working-directory: openbody-ts
+        env:
+          OPENBODY_STANDARD: ${{ github.workspace }}/openbody
+          OPENBODY_REGISTRY: ${{ github.workspace }}/openbody-registry
+        run: |
+          npm run sync-schema
+          npm run sync-crosswalk
+
+      - name: Conformance (typecheck + lossless + vectors + resolver + mappers)
         working-directory: openbody-ts
         env:
           OPENBODY_STANDARD: ${{ github.workspace }}/openbody

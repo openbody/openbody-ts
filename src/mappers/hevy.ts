@@ -1,5 +1,6 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
 import { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { resolveExerciseRef } from "../resolve.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
@@ -49,7 +50,9 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
         wu.performance = perf;
         return wu;
       });
-      return { id: `${session.id}-ex${idx}`, recordType: "Exercise", exerciseRef: { opaque: g.title }, workUnits };
+      // §6.5 ladder via the registry crosswalk: canonical id where one resolves, with the
+      // original Hevy name preserved losslessly in `opaque` (see src/resolve.ts).
+      return { id: `${session.id}-ex${idx}`, recordType: "Exercise", exerciseRef: resolveExerciseRef(g.title, { source: "hevy" }), workUnits };
     };
     if (hasSuperset) {
       // §5.3 at-most-one container: any superset ⇒ everything goes under blocks[].

@@ -1,4 +1,7 @@
-// The OpenBody §8.3 canonical normalization / equivalence procedure.
+// The OpenBody canonical normalization / equivalence procedure — the conformance
+// suite's judging method, conformance/EQUIVALENCE.md (SPEC §8.3). This reference
+// implementation is the equivalence oracle; conformant implementations need not
+// implement this.
 // Reduces a document (a record or array of records) to a sorted set of canonical
 // record byte strings. Two documents are equivalent iff these sets are equal.
 import { canonicalString, deepCanon, type Json } from "./canonical.js";
@@ -134,7 +137,7 @@ function addPartOf(rec: Rec, parentId: string): void {
   }
 }
 
-// Recursively strip ids from a copied subtree (§8.3 step 5: roundScheme copies 2..n).
+// Recursively strip ids from a copied subtree (EQUIVALENCE.md step 5: roundScheme copies 2..n).
 function stripIds(rec: Rec): void {
   delete rec.id;
   for (const field of CONTAINERS[rec?.recordType] || []) {
@@ -162,7 +165,7 @@ function injectRoundMetric(rec: Rec, value: any): void {
   }
 }
 
-// §8.3 step 5: expand `Block.roundScheme:[v1..vn]` into n in-order copies of `children`;
+// EQUIVALENCE.md step 5: expand `Block.roundScheme:[v1..vn]` into n in-order copies of `children`;
 // copy r injects vr into ladder-following WorkUnits; copies 2..n are id-less.
 function expandRoundScheme(block: Rec): void {
   const rs = block.roundScheme;
@@ -184,7 +187,7 @@ function expandRoundScheme(block: Rec): void {
   delete block.roundScheme;
 }
 
-// §8.3 step 5: expand `sets:N` into N WorkUnits (1st keeps id+position; rest id-less, after).
+// EQUIVALENCE.md step 5: expand `sets:N` into N WorkUnits (1st keeps id+position; rest id-less, after).
 function expandSets(arr: any[]): any[] {
   const out: any[] = [];
   for (const item of arr) {
@@ -248,7 +251,7 @@ export function normalizeDocument(doc: Json): string[] {
   return flat.map((r) => canonicalString(deepCanon(r as Json))).sort();
 }
 
-/** True iff two documents normalize to the same set of canonical records (§8.3). */
+/** True iff two documents normalize to the same set of canonical records (EQUIVALENCE.md). */
 export function equivalent(a: Json, b: Json): boolean {
   const na = normalizeDocument(a);
   const nb = normalizeDocument(b);

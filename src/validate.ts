@@ -110,7 +110,7 @@ function targetVariant(v: any): string | undefined {
 // absolute/range Target; MUST be omitted when `value` is relativeToThreshold or
 // stopCondition (the unit derives from the resolved threshold, or doesn't apply).
 // For absolute/range, the unit MAY instead live nested inside the Target itself
-// (`value.absolute.unit` / `value.range.unit`) pre-normalization — §8.3 step 2
+// (`value.absolute.unit` / `value.range.unit`) pre-normalization — EQUIVALENCE.md step 2
 // folds it up to the sibling `Load.unit`, and both pre-fold locations are valid
 // (proven by the load-range-unit-fold equivalence vector) — so either location
 // satisfies "required" for those two variants. A bare scalar has no such inner
@@ -126,7 +126,7 @@ function checkLoadUnit(load: any, where: string): string[] {
   } else if (variant === "absolute" || variant === "range") {
     const nestedUnit = load.value[variant]?.unit;
     if (load.unit === undefined && nestedUnit === undefined) {
-      return [`${where}: Load.unit is required when value is an ${variant} Target (unless nested inside value.${variant}.unit, folded on normalization) (§5.12, §8.3)`];
+      return [`${where}: Load.unit is required when value is an ${variant} Target (unless nested inside value.${variant}.unit, folded on normalization) (§5.12; folded per EQUIVALENCE.md)`];
     }
   } else if (variant === "relativeToThreshold" || variant === "stopCondition") {
     if (load.unit !== undefined) {

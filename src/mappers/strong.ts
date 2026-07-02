@@ -1,5 +1,6 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
 import { num, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { resolveExerciseRef } from "../resolve.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
 export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -37,7 +38,9 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
       else exGroups.push({ name: r["Exercise Name"], sets: [r] });
     }
     session.exercises = exGroups.map((g, i) => ({
-      id: `${session.id}-ex${i}`, recordType: "Exercise", exerciseRef: { opaque: g.name },
+      // §6.5 ladder via the registry crosswalk: canonical id where one resolves, with the
+      // original Strong name preserved losslessly in `opaque` (see src/resolve.ts).
+      id: `${session.id}-ex${i}`, recordType: "Exercise", exerciseRef: resolveExerciseRef(g.name, { source: "strong" }),
       workUnits: g.sets.map((s, j) => {
         const reps = num(s.Reps), dist = num(s.Distance), secs = num(s.Seconds), wt = num(s.Weight);
         const scoring = reps ? "reps" : dist ? "distance" : secs ? "time" : "reps";

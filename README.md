@@ -1,7 +1,7 @@
 # openbody-ts
 
 The **TypeScript reference implementation** of the [OpenBody](https://github.com/openbody/openbody)
-standard — validate, canonically normalize (§8.3), and check equivalence of OpenBody
+standard — validate, canonically normalize (the conformance suite's EQUIVALENCE.md method), and check equivalence of OpenBody
 records, plus a conformance-vector runner.
 
 > Status: early (v0.1.0), tracks the **current pre-v1.0 OpenBody draft** (see the standard's
@@ -12,7 +12,7 @@ records, plus a conformance-vector runner.
 ## What it does
 
 - **`validate(record)`** — validates against the published JSON Schema (§§4–7).
-- **`normalizeDocument(doc)`** — runs the §8.3 canonical-normalization pipeline
+- **`normalizeDocument(doc)`** — runs the EQUIVALENCE.md canonical-normalization pipeline
   (number → lowest-terms fixed-point, unit canon, scalar→Target expansion, ExerciseRef
   fold, `sets` expansion, deterministic id assignment, flatten + `partOf`, status
   default, RFC 8785 serialization) → a sorted set of canonical record byte strings.
@@ -22,6 +22,9 @@ records, plus a conformance-vector runner.
   (`npm run mappers`). Plus one outbound mapper, OpenBody → Strong CSV
   (`mapOpenBodyToStrong`), for the reverse direction (resistance-training `reps` sets only —
   see `src/mappers/to-strong.ts` for v1 scope).
+- **`resolveExerciseRef(name, { source })`** — the §6.5 producer-side matching ladder:
+  raw app exercise names → canonical registry ids, with the original string preserved
+  losslessly (see "Exercise-name resolution" below). Wired into the Hevy/Strong mappers.
 
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
@@ -29,8 +32,24 @@ canonical bytes the spec describes.
 ## Install (as a dependency)
 
 Not yet published to npm (`OB-11` — packaging is ready; publish itself is a
-deliberate, separate action gated on the project's go-public timing). Once
-published: `npm install @openbody/openbody-ts`, then `import { validate, normalizeDocument, equivalent } from "@openbody/openbody-ts"`.
+deliberate, separate action gated on the project's go-public timing). **Until then,
+install from a git checkout** — pack a tarball and install that (the `prepack` hook
+vendors the schema + crosswalk snapshots and builds `dist/` automatically):
+
+```bash
+# side-by-side checkouts (the pack step reads the schema + registry from the siblings):
+git clone https://github.com/openbody/openbody.git
+git clone https://github.com/openbody/openbody-registry.git
+git clone https://github.com/openbody/openbody-ts.git
+(cd openbody-ts && npm ci && npm pack)          # → openbody-openbody-ts-<version>.tgz
+npm install ./openbody-ts/openbody-openbody-ts-*.tgz   # in your project
+```
+
+A plain `npm install git+https://github.com/openbody/openbody-ts.git` does **not**
+work yet: the vendored data snapshots (`vendor/`) are deliberately gitignored and a
+git install can't see the sibling repos to regenerate them.
+
+Once published: `npm install @openbody/openbody-ts`, then `import { validate, normalizeDocument, equivalent } from "@openbody/openbody-ts"`.
 
 The published package **vendors a schema snapshot** (`vendor/openbody.schema.json`,
 refreshed from the sibling `openbody` repo by `npm run sync-schema`, which runs
@@ -42,11 +61,14 @@ runtime. `npm run build` compiles `src/` to `dist/` (ESM + `.d.ts`); `npm pack
 
 ```bash
 npm install
-npm test           # typecheck + lossless number checks + vectors + mapper round-trips
+npm run sync-schema     # vendor the schema snapshot from ../openbody (typecheck needs it)
+npm run sync-crosswalk  # vendor the exercise-name data from ../openbody-registry (ditto)
+npm test           # typecheck + lossless number checks + vectors + resolver + mapper round-trips
 # …or individually:
 npm run vectors    # run the standard's conformance vectors against this impl
 npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple/FIT) round-trip
-npm run lossless   # §8.3 lossless-number checks
+npm run resolve    # exercise-name resolver unit tests (§6.5 ladder)
+npm run lossless   # EQUIVALENCE.md lossless-number checks
 npm run typecheck
 npm run build      # compile src/ -> dist/
 ```
@@ -61,13 +83,61 @@ resolution lives in `src/schema-loader-node.ts`, a Node-only module kept separat
 from `src/validate.ts` (and never re-exported from `src/index.ts`) so importing the
 package's main entry point stays safe to bundle for a browser — see the Layout table.
 
-## Number parsing (§8.3 step 1)
+## Exercise-name resolution (SPEC §6.5)
+
+Exercise identity is the interop problem OpenBody exists to solve: Hevy calls it
+"Bench Press (Barbell)", Strong "Barbell Bench Press" — `resolveExerciseRef` turns both
+into the same canonical registry id, without ever losing the original string:
+
+```ts
+import { resolveExerciseRef } from "@openbody/openbody-ts";
+
+resolveExerciseRef("Bench Press (Barbell)", { source: "hevy" });
+// → { id: "bench-press.barbell.flat", opaque: "Bench Press (Barbell)" }
+resolveExerciseRef("Some Custom Movement", { source: "hevy" });
+// → { opaque: "Some Custom Movement" }   (lossless fallback — never dropped)
+```
+
+The ladder is deterministic, climbing the strictest rung that matches:
+
+1. **Exact alias** — the app's exact name in its curated alias table
+   (`openbody-registry/crosswalk/<source>.json`). A curated `null` there means "known
+   unmappable" and is authoritative: resolution stops and falls back to opaque (no fuzzy
+   rung may override the curator).
+2. **Canonical-id passthrough** — the name already *is* a registry id.
+3. **Normalized match** — lowercase / punctuation-stripped / whitespace-collapsed lookup
+   against all alias tables and the registry's id + name index, tried in two
+   deterministic forms: as-is, then token-sorted (word-order agnostic). There is
+   deliberately **no** discard-the-parenthetical rung — a qualifier like "(Assisted)" is
+   semantically load-bearing, and dropping it would mint a false canonical id (the
+   near-miss mapping the crosswalk curation rule forbids); uncurated qualified names
+   stay opaque until an alias-table entry is curated. A normalized key claimed by two
+   different canonical ids is ambiguous and never matches.
+4. **Opaque fallback** — `{ opaque: name }`, per §6.1/§6.5 ("couldn't resolve" never
+   means "drop").
+
+Resolved refs carry **both** `id` (the interop anchor) and `opaque` (the original app
+string, byte-for-byte) — the schema's `ExerciseRef` permits co-presence, and it's what
+lets the outbound Strong mapper re-emit the source app's own names on round-trip
+(`sourceNameForId` is the reverse lookup). The Hevy and Strong mappers call the
+resolver automatically.
+
+**Maintaining the alias tables**: they live in the registry repo
+(`openbody-registry/crosswalk/hevy.json` / `strong.json`) — one `{ name, canonical }`
+entry per app exercise name, `canonical: null` for movements the registry doesn't
+cover yet (do *not* map to a near-miss id; null is correct until the registry grows the
+entry, and `openbody-registry`'s `npm run check` verifies every non-null target
+resolves). After editing them, re-run `npm run sync-crosswalk` here to refresh the
+vendored snapshot (`vendor/crosswalk.json`, gitignored — same pattern as the schema;
+default sibling path `../openbody-registry`, override with `OPENBODY_REGISTRY`).
+
+## Number parsing (EQUIVALENCE.md step 1)
 
 JSON numbers are parsed **losslessly** from their decimal text (`parseLossless` →
 `LosslessNumber`), never via `float64`, before fixed-point canonicalization — so
 high-precision decimals and integers above 2^53 canonicalize to their exact value
 (`npm run lossless` proves it). Feed documents through `parseLossless` (or raw text)
-for full §8.3 fidelity; passing a value pre-parsed with `JSON.parse` falls back to the
+for full EQUIVALENCE.md fidelity; passing a value pre-parsed with `JSON.parse` falls back to the
 lossy float64 path.
 
 ## Known limitations (first cut)
@@ -79,11 +149,13 @@ lossy float64 path.
 | Path | Role |
 |---|---|
 | `src/canonical.ts` | number/timestamp canon + RFC 8785 serialization + set-array ordering |
-| `src/normalize.ts` | the §8.3 normalization / equivalence algorithm |
+| `src/normalize.ts` | the EQUIVALENCE.md normalization / equivalence algorithm (the suite's oracle) |
 | `src/validate.ts` | JSON Schema validation (ajv), browser-safe — validates against the vendored schema, no `node:*` imports |
 | `src/schema-loader-node.ts` | Node-only: `OPENBODY_STANDARD`-aware schema resolution + `standardDir`, used by dev/test scripts; not exported from `src/index.ts` |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
+| `src/resolve.ts` | §6.5 exercise-name resolver (`resolveExerciseRef` / `sourceNameForId`), browser-safe — static import of the vendored crosswalk snapshot |
 | `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index; `to-strong.ts` is the reverse (OpenBody → Strong CSV) mapper |
 | `scripts/run-vectors.ts` | conformance-vector runner |
 | `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |
-| `vendor/` | gitignored; populated by `sync-schema`, shipped in the published package |
+| `scripts/sync-crosswalk.mjs` | builds `vendor/crosswalk.json` (registry name index + per-app alias tables) from the sibling `openbody-registry` repo |
+| `vendor/` | gitignored; populated by `sync-schema` + `sync-crosswalk`, shipped in the published package |

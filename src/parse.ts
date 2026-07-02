@@ -1,7 +1,7 @@
-// Lossless JSON parsing for OpenBody §8.3 step 1.
+// Lossless JSON parsing for EQUIVALENCE.md step 1 (exact-decimal interpretation).
 //
 // `JSON.parse` coerces every number literal to an IEEE-754 float64, which silently
-// loses precision for high-precision decimals and integers above 2^53. §8.3 step 1
+// loses precision for high-precision decimals and integers above 2^53. EQUIVALENCE.md step 1
 // requires numbers to be interpreted from their *decimal text*, never via binary
 // floating point. This parser preserves each number token verbatim as a
 // `LosslessNumber`, so the canonicalizer (`canonNumber`) can reduce the exact source

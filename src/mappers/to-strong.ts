@@ -18,6 +18,7 @@
 //   - `prescription`, `sets` expansion, `setRole`, `repDetail`, `effortLoad`/RPE, and any
 //     other WorkUnit fields Strong's CSV has no column for
 import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { sourceNameForId } from "../resolve.js";
 
 const HEADER = ["Date", "Workout Name", "Duration", "Exercise Name", "Set Order", "Weight", "Reps", "Distance", "Seconds", "Notes", "Workout No"];
 
@@ -62,7 +63,14 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], _opts: MapOptions
     for (const ex of exercises) {
       if (ex.recordType !== "Exercise") continue;
       const er = ex.exerciseRef;
-      const name = typeof er === "string" ? er : er?.opaque ?? er?.id ?? "";
+      // Name preference: the lossless original source string (`opaque`, §6.1 — so
+      // Hevy → OpenBody → Strong keeps the app's own names byte-for-byte), then Strong's
+      // alias for a resolved canonical id (OpenBody-native data lands as a name Strong's
+      // library knows), then the raw id as a last resort. A bare-string ref is an id (§6.1).
+      const name =
+        typeof er === "string"
+          ? sourceNameForId(er, "strong") ?? er
+          : er?.opaque ?? (er?.id ? sourceNameForId(er.id, "strong") ?? er.id : "");
       const workUnits: OpenBodyRecord[] = ex.workUnits ?? [];
 
       workUnits.forEach((wu, j) => {

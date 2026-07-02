@@ -1,4 +1,4 @@
-// Canonicalization primitives for OpenBody §8.3.
+// Canonicalization primitives for the OpenBody normalized-equivalence method (conformance/EQUIVALENCE.md; SPEC §8.3 points there).
 import canonicalizeMod from "canonicalize";
 import { LosslessNumber } from "./parse.js";
 // canonicalize is CJS (module.exports = fn); cast fixes NodeNext default-import types.
@@ -11,11 +11,11 @@ const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"])
 
 /**
  * Step 1 (numbers): reduce any numeric value to lowest-terms fixed-point with string
- * coefficient/exponent (§8.3). Accepts a {@link LosslessNumber} (exact source decimal,
+ * coefficient/exponent (EQUIVALENCE.md). Accepts a {@link LosslessNumber} (exact source decimal,
  * the spec-correct input), a fixed-point `{coefficient, exponent}` object, or — as a
  * lossy fallback for callers that pre-parsed with `JSON.parse` — a JS number.
  *
- * For full §8.3 fidelity, parse documents with {@link parseLossless} so numbers arrive
+ * For full EQUIVALENCE.md fidelity, parse documents with {@link parseLossless} so numbers arrive
  * as `LosslessNumber`; the plain-number path can lose precision above 2^53 or for
  * high-precision decimals.
  */
@@ -55,7 +55,7 @@ export function isFixedPointLike(v: unknown): boolean {
     && Object.keys(v as any).length === 2;
 }
 
-/** Step 1 (timestamps): canonical RFC 3339 spelling (§8.3). */
+/** Step 1 (timestamps): canonical RFC 3339 spelling (EQUIVALENCE.md step 1). */
 export function canonTimestamp(s: string): string {
   let t = s.trim().toUpperCase();
   // zero offset -> Z
@@ -70,7 +70,7 @@ export function canonTimestamp(s: string): string {
 const OPAQUE_KEYS = new Set(["extension", "script"]);
 
 /**
- * Recursively apply number + timestamp canonicalization across a record (§8.3 step 1).
+ * Recursively apply number + timestamp canonicalization across a record (EQUIVALENCE.md step 1).
  * Bare numbers are canonicalized everywhere (so JCS never float64-formats), but a
  * `{coefficient, exponent}` *object* is collapsed to fixed-point only OUTSIDE opaque
  * `extension`/`script` subtrees; inside them it stays a structural object, and timestamp
@@ -92,7 +92,7 @@ export function deepCanon(value: unknown, inOpaque = false): Json {
   return value as Json;
 }
 
-/** Step 9: order the set-valued arrays per §8.3 (key order, then canonical-byte tiebreak). */
+/** Step 9: order the set-valued arrays per EQUIVALENCE.md step 9 (key order, then canonical-byte tiebreak). */
 const SET_ARRAY_KEYS: Record<string, string[]> = {
   links: ["type", "ref"],
   effortLoad: ["kind", "method"],

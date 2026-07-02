@@ -2,7 +2,7 @@
   "name": "@openbody/openbody-ts",
   "version": "0.1.0",
   "type": "module",
-  "description": "OpenBody reference implementation (TypeScript): validate + §8.3 canonical normalize + conformance vector runner. Apache-2.0.",
+  "description": "OpenBody reference implementation (TypeScript): validate + canonical normalize (the conformance suite's EQUIVALENCE.md method) + conformance vector runner. Apache-2.0.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -41,11 +41,13 @@
     "vectors": "tsx scripts/run-vectors.ts",
     "lossless": "tsx scripts/test-lossless.ts",
     "mappers": "tsx scripts/test-mappers.ts",
+    "resolve": "tsx scripts/test-resolve.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run mappers",
+    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run resolve && npm run mappers",
     "sync-schema": "node scripts/sync-schema.mjs",
+    "sync-crosswalk": "node scripts/sync-crosswalk.mjs",
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "npm run sync-schema && npm run build"
+    "prepack": "npm run sync-schema && npm run sync-crosswalk && npm run build"
   },
   "dependencies": {
     "ajv": "^8.17.1",
