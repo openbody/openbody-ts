@@ -1,41 +1,47 @@
 // Schema validation against the published OpenBody JSON Schema (§§4-7).
-// `standardDir` (a full sibling-repo checkout, default ../openbody, override with
-// OPENBODY_STANDARD) is what the conformance-vector runner and test scripts need —
-// dev/test-only, never shipped in the published package. The schema itself is
-// resolved separately: OPENBODY_STANDARD wins if set (so iterating on an unmerged
-// spec change works without re-syncing); otherwise this prefers the vendored copy
-// this package ships (`vendor/openbody.schema.json`, refreshed from the sibling
-// repo by `npm run sync-schema`, run automatically pre-pack/publish), falling back
-// to the sibling-repo path only if the vendored copy hasn't been synced yet (e.g. a
-// fresh clone before the first build). Both paths are resolved relative to this
-// module's own location, not `process.cwd()` — a consumer importing this package
-// from an arbitrary working directory must still find the schema.
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+//
+// This module is the package's public, browser-safe validation surface — it must
+// stay free of `node:*` imports so bundling this package for a browser (Vite/Astro/
+// etc.) doesn't pull in Node built-ins. The default `validate` export is compiled
+// once, at module load, against the schema this package vendors and ships
+// (`vendor/openbody.schema.json`, a static JSON import baked in at build time —
+// refreshed from the sibling `openbody` repo by `npm run sync-schema`, run
+// automatically pre-pack/publish).
+//
+// Dev/test workflows that need to validate against an unmerged local spec change
+// (the `OPENBODY_STANDARD` env override) or need `standardDir` (a full sibling-repo
+// checkout path) do NOT use this module directly — see `src/schema-loader-node.ts`,
+// a Node-only sibling module (not re-exported from `src/index.ts`) that resolves
+// OPENBODY_STANDARD > vendored > sibling-repo-fallback and builds its own `validate`
+// via `createValidator` below.
+import schema from "../vendor/openbody.schema.json" with { type: "json" };
 import Ajv2020Mod from "ajv/dist/2020.js";
 import addFormatsMod from "ajv-formats";
 // ajv / ajv-formats are CJS; casts fix NodeNext default-import types (runtime is fine).
 const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>): any };
 const addFormats = addFormatsMod as unknown as (ajv: any) => void;
 
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// Compiles a JSON Schema document into a `validate` function (ajv compile + the
+// §5.2/§5.5/§5.11/§7.5 semantic checks below that the schema itself can't express).
+// Exported so `schema-loader-node.ts` can bind the same validation logic to a
+// different (OPENBODY_STANDARD-resolved) schema document without duplicating it.
+export function createValidator(schemaDoc: unknown) {
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  addFormats(ajv);
+  const _validate = ajv.compile(schemaDoc);
 
-export const standardDir = process.env.OPENBODY_STANDARD
-  ? path.resolve(process.env.OPENBODY_STANDARD)
-  : path.resolve(packageRoot, "../openbody");
-
-const vendoredSchemaPath = path.join(packageRoot, "vendor/openbody.schema.json");
-const schemaPath = process.env.OPENBODY_STANDARD
-  ? path.join(standardDir, "schema/openbody.schema.json")
-  : fs.existsSync(vendoredSchemaPath)
-    ? vendoredSchemaPath
-    : path.join(standardDir, "schema/openbody.schema.json");
-
-const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-addFormats(ajv);
-const _validate = ajv.compile(schema);
+  return function validate(record: unknown): { valid: boolean; errors: string | null } {
+    const ok = _validate(record);
+    const phaseErrors = ok ? validateProgramPhases(record as Record<string, any>) : [];
+    const semanticErrors = ok ? validateSemantics(record as Record<string, any>) : [];
+    const valid = !!ok && phaseErrors.length === 0 && semanticErrors.length === 0;
+    if (valid) return { valid: true, errors: null };
+    const parts: string[] = [];
+    if (!ok) parts.push(ajv.errorsText(_validate.errors, { separator: "; " }));
+    parts.push(...phaseErrors, ...semanticErrors);
+    return { valid: false, errors: parts.join("; ") };
+  };
+}
 
 // §5.2 Program.phases cross-checks the schema cannot express (they compare two
 // arrays on the same record, not a fixed shape): every phases[].sessions entry
@@ -247,14 +253,5 @@ function validateSemantics(record: Record<string, any>): string[] {
   return errors;
 }
 
-export function validate(record: unknown): { valid: boolean; errors: string | null } {
-  const ok = _validate(record);
-  const phaseErrors = ok ? validateProgramPhases(record as Record<string, any>) : [];
-  const semanticErrors = ok ? validateSemantics(record as Record<string, any>) : [];
-  const valid = !!ok && phaseErrors.length === 0 && semanticErrors.length === 0;
-  if (valid) return { valid: true, errors: null };
-  const parts: string[] = [];
-  if (!ok) parts.push(ajv.errorsText(_validate.errors, { separator: "; " }));
-  parts.push(...phaseErrors, ...semanticErrors);
-  return { valid: false, errors: parts.join("; ") };
-}
+// Default, browser-safe export: bound to the vendored schema snapshot at module load.
+export const validate = createValidator(schema);

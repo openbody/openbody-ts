@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeDocument, equivalent } from "../src/normalize.js";
-import { validate, standardDir } from "../src/validate.js";
+import { validate, standardDir } from "../src/schema-loader-node.js";
 import { parseLossless } from "../src/parse.js";
 
 // The minimum-core conformance vectors plus the extended activity-coverage corpus
