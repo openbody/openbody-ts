@@ -185,16 +185,36 @@ function checkExerciseRefEnclosing(rec: Record<string, any>): string[] {
   return errors;
 }
 
+// §5.11 ThresholdProfileEntry.estimationFormula/estimatedFrom (OB-32) MUST NOT
+// be present when `source` is "tested" — they document how an *estimate* was
+// derived, so they're meaningless (and misleading) attached to a tested value.
+function checkThresholdEstimationProvenance(rec: Record<string, any>): string[] {
+  if (rec.recordType !== "ThresholdProfile" || !Array.isArray(rec.entries)) return [];
+  const errors: string[] = [];
+  rec.entries.forEach((entry: any, i: number) => {
+    if (!entry || typeof entry !== "object" || entry.source !== "tested") return;
+    if (entry.estimationFormula !== undefined) {
+      errors.push(`ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimationFormula MUST NOT be present when source is "tested" (§5.11)`);
+    }
+    if (entry.estimatedFrom !== undefined) {
+      errors.push(`ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimatedFrom MUST NOT be present when source is "tested" (§5.11)`);
+    }
+  });
+  return errors;
+}
+
 // Intra-record semantic rules the schema can't express (context-dependent, not a
 // fixed shape): Load.unit's conditional requirement, scoring↔metric agreement,
-// sets+performance mutual exclusion, the tombstone-only-field rule, and
-// exerciseRef/enclosing-Exercise mutual exclusion. Walks the whole inlined-record
-// tree under `record` (§5.1), not just the top-level record.
+// sets+performance mutual exclusion, the tombstone-only-field rule,
+// exerciseRef/enclosing-Exercise mutual exclusion, and estimation-provenance
+// gating on ThresholdProfileEntry.source. Walks the whole inlined-record tree
+// under `record` (§5.1), not just the top-level record.
 function validateSemantics(record: Record<string, any>): string[] {
   const errors: string[] = [];
   forEachRecord(record, (rec) => {
     errors.push(...checkTombstone(rec));
     errors.push(...checkExerciseRefEnclosing(rec));
+    errors.push(...checkThresholdEstimationProvenance(rec));
     if (rec.recordType === "WorkUnit") {
       if (rec.prescription?.load) {
         errors.push(...checkLoadUnit(rec.prescription.load, `WorkUnit ${rec.id ?? "?"} prescription.load`));
