@@ -7,4 +7,5 @@ export { validate } from "./validate.js";
 export { canonicalString, canonNumber, canonTimestamp, deepCanon } from "./canonical.js";
 export { parseLossless, LosslessNumber } from "./parse.js";
 export { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong } from "./mappers/index.js";
+export type { OpenBodyRecord, MapOptions } from "./mappers/index.js";
 export type { Json, FixedPoint } from "./canonical.js";
