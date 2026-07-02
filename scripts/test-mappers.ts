@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate } from "../src/validate.js";
 import { normalizeDocument } from "../src/normalize.js";
-import { mapHevy, mapStrong, mapStrava, mapAppleHealth } from "../src/mappers/index.js";
+import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit } from "../src/mappers/index.js";
 
 const ex = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../examples");
 const read = (p: string) => fs.readFileSync(path.join(ex, p), "utf8");
@@ -16,6 +16,8 @@ const cases: { name: string; records: Record<string, any>[] }[] = [
   { name: "strong", records: mapStrong(read("strong/strong-sample.csv")) },
   { name: "strava", records: mapStrava(JSON.parse(read("strava/strava-sample.json"))) },
   { name: "apple-health", records: mapAppleHealth(read("apple-health/export-sample.xml")) },
+  { name: "fit-activity", records: mapFit(JSON.parse(read("fit/fit-activity-sample.json"))) },
+  { name: "fit-workout", records: mapFit(JSON.parse(read("fit/fit-workout-sample.json"))) },
 ];
 
 let fail = 0;

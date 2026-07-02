@@ -17,8 +17,9 @@ records, plus a conformance-vector runner.
   fold, `sets` expansion, deterministic id assignment, flatten + `partOf`, status
   default, RFC 8785 serialization) → a sorted set of canonical record byte strings.
 - **`equivalent(a, b)`** — true iff two documents normalize to the same set.
-- **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health;
-  Health Connect via the Apple mapper): pure functions with round-trip tests (`npm run mappers`).
+- **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health,
+  FIT; Health Connect via the Apple mapper): pure functions with round-trip tests
+  (`npm run mappers`).
 
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
@@ -42,7 +43,7 @@ npm install
 npm test           # typecheck + lossless number checks + vectors + mapper round-trips
 # …or individually:
 npm run vectors    # run the standard's conformance vectors against this impl
-npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple) round-trip
+npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple/FIT) round-trip
 npm run lossless   # §8.3 lossless-number checks
 npm run typecheck
 npm run build      # compile src/ -> dist/
@@ -76,7 +77,7 @@ lossy float64 path.
 | `src/normalize.ts` | the §8.3 normalization / equivalence algorithm |
 | `src/validate.ts` | JSON Schema validation (ajv) |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
-| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple) + index |
+| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index |
 | `scripts/run-vectors.ts` | conformance-vector runner |
 | `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |
 | `vendor/` | gitignored; populated by `sync-schema`, shipped in the published package |

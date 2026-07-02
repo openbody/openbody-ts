@@ -1,0 +1,13 @@
+{
+  "sessions": [
+    { "start_time": "2026-07-02T06:30:00Z", "sport": "running", "total_elapsed_time": 240,
+      "total_distance": 800, "total_calories": 62, "avg_heart_rate": 152, "max_heart_rate": 168 }
+  ],
+  "records": [
+    { "timestamp": "2026-07-02T06:30:00Z", "position_lat": 45.5231, "position_long": -122.6765, "altitude": 45.2, "heart_rate": 138, "cadence": 168 },
+    { "timestamp": "2026-07-02T06:31:00Z", "position_lat": 45.5241, "position_long": -122.6755, "altitude": 47.8, "heart_rate": 149, "cadence": 172 },
+    { "timestamp": "2026-07-02T06:32:00Z", "position_lat": 45.5251, "position_long": -122.6745, "altitude": 51.0, "heart_rate": 156, "cadence": 174 },
+    { "timestamp": "2026-07-02T06:33:00Z", "position_lat": 45.5261, "position_long": -122.6735, "altitude": 49.6, "heart_rate": 160, "cadence": 173 },
+    { "timestamp": "2026-07-02T06:34:00Z", "position_lat": 45.5271, "position_long": -122.6725, "altitude": 46.1, "heart_rate": 168, "cadence": 175 }
+  ]
+}

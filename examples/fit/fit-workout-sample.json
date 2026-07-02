@@ -1,0 +1,16 @@
+{
+  "workouts": [
+    { "wkt_name": "Sweet Spot Intervals", "sport": "cycling", "num_valid_steps": 5 }
+  ],
+  "workout_steps": [
+    { "message_index": { "value": 0 }, "wkt_step_name": "Warm Up", "duration_type": "time", "duration_value": 600,
+      "target_type": "power", "custom_target_value_low": 100, "custom_target_value_high": 150, "intensity": "warmup" },
+    { "message_index": { "value": 1 }, "wkt_step_name": "Interval", "duration_type": "time", "duration_value": 300,
+      "target_type": "power", "target_value": 200, "intensity": "active" },
+    { "message_index": { "value": 2 }, "wkt_step_name": "Recover", "duration_type": "time", "duration_value": 120,
+      "target_type": "open", "intensity": "rest" },
+    { "message_index": { "value": 3 }, "duration_type": "repeat_until_steps_cmplt", "duration_value": 1, "target_value": 4 },
+    { "message_index": { "value": 4 }, "wkt_step_name": "Cool Down", "duration_type": "time", "duration_value": 600,
+      "target_type": "power", "custom_target_value_low": 150, "custom_target_value_high": 80, "intensity": "cooldown" }
+  ]
+}

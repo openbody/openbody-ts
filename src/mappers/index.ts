@@ -6,4 +6,5 @@ export { mapHevy } from "./hevy.js";
 export { mapStrong } from "./strong.js";
 export { mapStrava, type StravaInput } from "./strava.js";
 export { mapAppleHealth } from "./apple-health.js";
+export { mapFit, type FitInput } from "./fit.js";
 export { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
