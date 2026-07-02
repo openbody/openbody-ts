@@ -56,9 +56,8 @@ function expandMetric(field: string, v: any): any {
     if (def) {
       if (v.absolute && v.absolute.unit === def) delete v.absolute.unit;
       if (v.range && v.range.unit === def) delete v.range.unit;
-      // `ramp.from`/`ramp.to` are directional and never reordered (§5.10) — only its
-      // `unit` is default-stripped here, exactly like absolute/range.
-      if (v.ramp && v.ramp.unit === def) delete v.ramp.unit;
+      // `ramp` is not a legal variant on these fields (§5.10 — restricted to
+      // `load.value`/`Intensity.value`, handled separately below); no ramp handling here.
     }
   }
   return v;
