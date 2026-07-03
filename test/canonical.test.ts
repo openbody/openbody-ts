@@ -2,8 +2,9 @@
 // normalization — ported from scripts/test-lossless.ts (B1 / OB-9).
 import { describe, expect, it } from "vitest";
 import { canonNumber, canonTimestamp, deepCanon } from "../src/canonical.js";
-import { normalizeDocument } from "../src/normalize.js";
+import { type NormalizeInput, normalizeDocument } from "../src/normalize.js";
 import { LosslessNumber, parseLossless } from "../src/parse.js";
+import type { WireRecord } from "../src/types.js";
 
 describe("canonNumber (spec examples, §8.3 step 1)", () => {
   it("37.4220 -> 37422e-3", () => {
@@ -40,7 +41,7 @@ describe("normalizeDocument end-to-end", () => {
       "asOf": "2026-01-01T00:00:00Z",
       "quantity": 80.123456789012345678
     }`);
-    const [bytes = ""] = normalizeDocument(doc as any);
+    const [bytes = ""] = normalizeDocument(doc as NormalizeInput);
     expect(bytes).toContain('"coefficient":"80123456789012345678"');
     expect(bytes).toContain('"exponent":"-18"');
   });
@@ -48,7 +49,7 @@ describe("normalizeDocument end-to-end", () => {
 
 describe("deepCanon", () => {
   it("converts nested LosslessNumber", () => {
-    const out = deepCanon({ a: new LosslessNumber("12.50"), b: [new LosslessNumber("100")] }) as any;
+    const out = deepCanon({ a: new LosslessNumber("12.50"), b: [new LosslessNumber("100")] }) as WireRecord;
     expect(out.a).toEqual({ coefficient: "125", exponent: "-1" });
     expect(out.b[0]).toEqual({ coefficient: "1", exponent: "2" });
   });
@@ -56,11 +57,11 @@ describe("deepCanon", () => {
   // §8.3 step 1: fixed-point-shaped objects are numeric ONLY outside extension/script.
   it("fixed-point object collapses in a numeric field but stays structural in extension", () => {
     // numeric-typed position: {coefficient:720, exponent:-1} = 72 → fixed-point {72, 0}
-    const numeric = deepCanon({ value: { coefficient: 720, exponent: -1 } }) as any;
+    const numeric = deepCanon({ value: { coefficient: 720, exponent: -1 } }) as WireRecord;
     expect(numeric.value).toEqual({ coefficient: "72", exponent: "0" });
     // inside extension: NOT re-read — a plain object whose number members canonicalize
     // independently (720 → 72×10¹; -1 → -1×10⁰).
-    const opaque = deepCanon({ extension: { "x:f": { coefficient: 720, exponent: -1 } } }) as any;
+    const opaque = deepCanon({ extension: { "x:f": { coefficient: 720, exponent: -1 } } }) as WireRecord;
     expect(opaque.extension["x:f"]).toEqual({
       coefficient: { coefficient: "72", exponent: "1" },
       exponent: { coefficient: "-1", exponent: "0" },

@@ -3,9 +3,10 @@
 // the rule's error-message branch. Uses the browser-safe validator (vendored schema),
 // exactly what package consumers get.
 import { describe, expect, it } from "vitest";
+import type { WireRecord } from "../src/types.js";
 import { validate } from "../src/validate.js";
 
-const workUnit = (over: Record<string, any>) => ({
+const workUnit = (over: WireRecord) => ({
   id: "wu-1",
   recordType: "WorkUnit",
   scoring: "reps",
@@ -152,7 +153,7 @@ describe("checkExerciseRefEnclosing (§5.5 exerciseRef vs enclosing Exercise)", 
 });
 
 describe("checkThresholdEstimationProvenance (§5.11 / OB-32)", () => {
-  const profile = (entry: Record<string, any>) => ({
+  const profile = (entry: WireRecord) => ({
     id: "tp-1",
     recordType: "ThresholdProfile",
     entries: [{ kind: "1RM", value: 140, unit: "kg", ...entry }],

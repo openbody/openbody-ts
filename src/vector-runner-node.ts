@@ -10,7 +10,7 @@
 // implementation.
 import fs from "node:fs";
 import path from "node:path";
-import { equivalent, normalizeDocument } from "./normalize.js";
+import { equivalent, type NormalizeInput, normalizeDocument } from "./normalize.js";
 import { parseLossless } from "./parse.js";
 import { standardDir, validate } from "./schema-loader-node.js";
 
@@ -50,7 +50,7 @@ export interface VectorOutcome {
   detail?: string;
 }
 
-function allValid(doc: any): string | null {
+function allValid(doc: unknown): string | null {
   for (const r of Array.isArray(doc) ? doc : [doc]) {
     const v = validate(r);
     if (!v.valid) return `schema: ${v.errors}`;
@@ -59,7 +59,7 @@ function allValid(doc: any): string | null {
 }
 
 // idempotence: re-normalizing the canonical output yields itself (round-trip proxy).
-function idempotent(doc: any): boolean {
+function idempotent(doc: NormalizeInput): boolean {
   const n1 = normalizeDocument(doc);
   const parsed = n1.map((s) => JSON.parse(s));
   const n2 = normalizeDocument(parsed);
@@ -70,7 +70,14 @@ function idempotent(doc: any): boolean {
 export function runVectorFile(dir: string, file: string): VectorOutcome {
   const text = fs.readFileSync(path.join(dir, file), "utf8");
   const v = JSON.parse(text); // plain parse: metadata + schema validation
-  const vL = parseLossless(text) as any; // lossless parse: documents for §8.3 normalization
+  // lossless parse: documents for §8.3 normalization (LosslessNumber-bearing trees).
+  // Which of record/a/b/input is present depends on v.kind — each branch reads only its own.
+  const vL = parseLossless(text) as {
+    record: NormalizeInput;
+    a: NormalizeInput;
+    b: NormalizeInput;
+    input: NormalizeInput;
+  };
   const name = `${v.name} [${v.kind}]`;
   const ok = (detail?: string): VectorOutcome => ({ name, ok: true, ...(detail ? { detail } : {}) });
   const bad = (why: string): VectorOutcome => ({ name, ok: false, detail: why });

@@ -31,8 +31,8 @@ export function canonNumber(n: number | LosslessNumber | { coefficient: unknown;
   } else if (typeof n === "number") {
     [coeff, exp] = decimalParts(n.toString());
   } else {
-    coeff = BigInt(String((n as any).coefficient).trim());
-    exp = Number(String((n as any).exponent).trim());
+    coeff = BigInt(String(n.coefficient).trim());
+    exp = Number(String(n.exponent).trim());
   }
   if (coeff === 0n) return { coefficient: "0", exponent: "0" };
   const negative = coeff < 0n;
@@ -72,9 +72,9 @@ export function isFixedPointLike(v: unknown): boolean {
     !!v &&
     typeof v === "object" &&
     !Array.isArray(v) &&
-    "coefficient" in (v as any) &&
-    "exponent" in (v as any) &&
-    Object.keys(v as any).length === 2
+    "coefficient" in v &&
+    "exponent" in v &&
+    Object.keys(v).length === 2
   );
 }
 
@@ -102,7 +102,8 @@ const OPAQUE_KEYS = new Set(["extension", "script"]);
 export function deepCanon(value: unknown, inOpaque = false): Json {
   if (value instanceof LosslessNumber) return canonNumber(value) as unknown as Json;
   if (typeof value === "number") return canonNumber(value) as unknown as Json;
-  if (!inOpaque && isFixedPointLike(value)) return canonNumber(value as any) as unknown as Json;
+  if (!inOpaque && isFixedPointLike(value))
+    return canonNumber(value as { coefficient: unknown; exponent: unknown }) as unknown as Json;
   if (Array.isArray(value)) return value.map((v) => deepCanon(v, inOpaque));
   if (value && typeof value === "object") {
     const out: Record<string, Json> = {};
@@ -144,8 +145,8 @@ function orderSetArrays(value: Json): Json {
       } else if (Array.isArray(nv) && keys !== undefined) {
         nv = [...nv].sort((a, b) => {
           for (const kk of keys) {
-            const av = String((a as any)?.[kk] ?? "");
-            const bv = String((b as any)?.[kk] ?? "");
+            const av = String((a as Record<string, Json> | null)?.[kk] ?? "");
+            const bv = String((b as Record<string, Json> | null)?.[kk] ?? "");
             if (av !== bv) return av < bv ? -1 : 1;
           }
           const ab = canonicalize(a) ?? "";

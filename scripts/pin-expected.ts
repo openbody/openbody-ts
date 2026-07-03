@@ -3,7 +3,7 @@
 // SPEC §8.3). Re-run when the spec/normalizer changes; review the diff.
 import fs from "node:fs";
 import path from "node:path";
-import { normalizeDocument } from "../src/normalize.js";
+import { type NormalizeInput, normalizeDocument } from "../src/normalize.js";
 import { parseLossless } from "../src/parse.js";
 import { standardDir } from "../src/schema-loader-node.js";
 
@@ -16,7 +16,7 @@ for (const f of fs.readdirSync(vdir).sort()) {
   const v = JSON.parse(text);
   if (v.kind !== "normalization") continue;
   // Normalize from the lossless parse (matches the runner; §8.3 step 1).
-  const input = (parseLossless(text) as any).input;
+  const input = (parseLossless(text) as { input: NormalizeInput }).input;
   v.expected = normalizeDocument(input);
   fs.writeFileSync(p, `${JSON.stringify(v, null, 2)}\n`);
   console.log(`pinned ${f} (${v.expected.length} records)`);

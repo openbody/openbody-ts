@@ -3,6 +3,7 @@
 // JSON grammar acceptance/rejection surface.
 import { describe, expect, it } from "vitest";
 import { LosslessNumber, parseLossless } from "../src/parse.js";
+import type { WireRecord } from "../src/types.js";
 
 describe("parseLossless preserves exact source text", () => {
   it("keeps >2^53 integer text", () => {
@@ -22,7 +23,7 @@ describe("parseLossless preserves exact source text", () => {
 
 describe("parseLossless accepts valid JSON", () => {
   it("parses objects/arrays/strings/booleans/null as plain JS values", () => {
-    const doc = parseLossless('{"a": [true, false, null, "s\\u00e9\\n"], "b": {}}') as any;
+    const doc = parseLossless('{"a": [true, false, null, "s\\u00e9\\n"], "b": {}}') as WireRecord;
     expect(doc.a).toEqual([true, false, null, "sé\n"]);
     expect(doc.b).toEqual({});
   });
@@ -37,7 +38,7 @@ describe("parseLossless accepts valid JSON", () => {
 
   it("handles escapes and whitespace", () => {
     expect(parseLossless(' "a\\"b\\\\c\\/d\\b\\f\\r\\t" ')).toBe('a"b\\c/d\b\f\r\t');
-    expect(parseLossless(" [ 1 ,\n2 ]\t") as any).toHaveLength(2);
+    expect(parseLossless(" [ 1 ,\n2 ]\t") as unknown[]).toHaveLength(2);
   });
 });
 
