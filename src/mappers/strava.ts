@@ -8,10 +8,14 @@ export interface StravaInput { activity: Record<string, any>; streams: Record<st
 export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRecord[] {
   const subject = opts.subject ?? "subj-001";
   const a = input.activity, s = input.streams;
+  if (!Array.isArray(s?.time?.data))
+    throw new Error('mapStrava: streams.time.data is missing — fetch the activity streams with keys including "time" (sampleArray offsets cannot be computed without it)');
   const start = a.start_date;
   const end = new Date(new Date(start).getTime() + a.elapsed_time * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
   const offsets: number[] = s.time.data;
-  const device = a.device_name ? { manufacturer: "garmin", model: a.device_name } : undefined;
+  // device_name is a free-form display string; Strava does not state the manufacturer
+  // separately, so none is fabricated (model-only, same as tcx.ts's <Creator>).
+  const device = a.device_name ? { model: a.device_name } : undefined;
   const prov = (method: string) => ({ method, sourceApp: "strava", ...(device ? { device } : {}) });
 
   const records: OpenBodyRecord[] = [];
@@ -34,16 +38,18 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
     measuredBy.push({ type: "measuredBy", ref: id });
   }
 
-  const aggregate = (id: string, type: string, value: number, unit: string, fromRef: string) => {
-    records.push({ id, recordType: "Measurement", subject, type, quantity: value, unit,
-      startTime: start, endTime: end, provenance: prov("algorithm"),
-      links: [{ type: "derivedFrom", ref: fromRef }] });
-  };
+  // Summary HR aggregates derive from the HR stream, but that stream exists only when it was
+  // fetched — link it conditionally (tcx.ts precedent), never emit a dangling derivedFrom.
+  // provenance.algorithm required with the aggregate (§7.4); Strava doesn't publish it, record a best-effort name.
   const hrRef = `strava-${a.id}-hr`;
-  if (a.average_heartrate != null) aggregate(`strava-${a.id}-hr-mean`, "heart_rate_mean", a.average_heartrate, "/min", hrRef);
-  if (a.max_heartrate != null) aggregate(`strava-${a.id}-hr-max`, "heart_rate_max", a.max_heartrate, "/min", hrRef);
-  // derivedFrom ⇒ provenance.algorithm required (§7.4); Strava doesn't publish it, record a best-effort name.
-  for (const r of records) if (r.links?.some((l: any) => l.type === "derivedFrom")) r.provenance.algorithm = { name: "strava-summary", version: "v3" };
+  const aggregate = (id: string, type: string, value: number, unit: string) => {
+    records.push({ id, recordType: "Measurement", subject, type, quantity: value, unit,
+      startTime: start, endTime: end,
+      provenance: { ...prov("algorithm"), algorithm: { name: "strava-summary", version: "v3" } },
+      ...(s.heartrate ? { links: [{ type: "derivedFrom", ref: hrRef }] } : {}) });
+  };
+  if (a.average_heartrate != null) aggregate(`strava-${a.id}-hr-mean`, "heart_rate_mean", a.average_heartrate, "/min");
+  if (a.max_heartrate != null) aggregate(`strava-${a.id}-hr-max`, "heart_rate_max", a.max_heartrate, "/min");
 
   records.push({
     id: `strava-${a.id}`, recordType: "Session", subject,
