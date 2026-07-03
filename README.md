@@ -52,6 +52,34 @@ records, plus a conformance-vector runner.
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
 
+## Quick start
+
+```ts
+import { mapHevy, normalizeDocument, validate } from "@openbody/openbody-ts";
+import { readFileSync } from "node:fs";
+
+const csv = readFileSync("hevy-export.csv", "utf8");
+const { records, warnings } = mapHevy(csv, { subject: "athlete-1" });
+for (const w of warnings) console.warn(`${w.code}: ${w.message}`);
+
+for (const record of records) {
+  const { valid, errors } = validate(record);
+  if (!valid) throw new Error(`invalid wire record ${record.id}: ${errors}`);
+}
+
+const canonical = normalizeDocument(records);
+console.log(`${records.length} wire record(s) -> ${canonical.length} canonical form(s)`);
+```
+
+Every inbound mapper (`mapHevy`, `mapStrong`, `mapStrava`, `mapAppleHealth`, `mapFit`,
+`mapFitbitTakeout`, `mapGpx`, `mapTcx`, `mapConcept2`, `mapTheCrag`) has this same shape:
+`(input, opts?) => MapperResult` — destructure `{ records, warnings }` and validate each
+mapped **wire** record, as above. `normalizeDocument`'s output is a different, string-
+fixed-point *comparison* form (§8.3) that deliberately does **not** pass the same
+schema validation — never feed it back into `validate`. See `examples/` for a
+runnable, fixture-backed version of each mapper, and "Errors & warnings" below for what
+each one can throw vs. report on the `warnings` channel.
+
 ## Errors & warnings
 
 One small typed hierarchy (`src/errors.ts`), all exported from the package root:
@@ -171,7 +199,10 @@ The ladder is deterministic, climbing the strictest rung that matches:
    semantically load-bearing, and dropping it would mint a false canonical id (the
    near-miss mapping the crosswalk curation rule forbids); uncurated qualified names
    stay opaque until an alias-table entry is curated. A normalized key claimed by two
-   different canonical ids is ambiguous and never matches.
+   different canonical ids is ambiguous and never matches. **Known limitation:** the
+   `punctuation-stripped` step is ASCII-only (see "Known limitations" below) — a
+   non-ASCII name's accented letters are stripped rather than folded, so it can miss a
+   match an accent-insensitive comparison would find.
 4. **Opaque fallback** — `{ opaque: name }`, per §6.1/§6.5 ("couldn't resolve" never
    means "drop").
 
@@ -201,21 +232,45 @@ lossy float64 path.
 
 ## Known limitations (first cut)
 
-- No CLI yet — the library surface (validate + normalize + runner + mappers) comes first.
+- **No CLI yet** — the library surface (validate + normalize + runner + mappers) comes first.
+- **`mapFit` requires pre-decoded input.** FIT is a binary protocol; this package bundles no
+  binary decoder (no correctly-licensed one can be a runtime dependency — see `src/mappers/fit.ts`'s
+  header). Decode the `.fit` file yourself first (e.g. with `fit-file-parser`, MIT) and pass the
+  resulting `mode: "list"` message lists in.
+- **Every mapper needs a `subject` id you provide.** `MapOptions.subject` has no sensible
+  default, so an omitted one falls back to the placeholder `DEFAULT_SUBJECT` (`"subj-001"`) —
+  reported once via a `default-subject` `MapWarning`, never silently. Pass your own subject id
+  in production.
+- **`resolveExerciseRef`'s normalized-match rung is ASCII-only.** Its `norm()` step
+  (`src/resolve.ts`) collapses anything outside `[a-z0-9]` to a space, which strips accents and
+  other non-ASCII letters rather than folding them (e.g. "Développé couché" normalizes to "d
+  velopp couch", not to an accent-insensitive match against "developpe couche") — a non-ASCII
+  exercise name can silently miss an alias-table entry that would otherwise match. No workaround
+  today beyond a curated exact-alias entry for the affected name.
 
 ## Layout
 
 | Path | Role |
 |---|---|
+| `src/index.ts` | the package's public entry point — re-exports every symbol below |
+| `src/types.ts` | the wire format as hand-written TypeScript types (one interface per schema `$def`) + the mapper contract (`MapOptions` / `MapperResult` / `MapWarning` / `DEFAULT_SUBJECT`) |
 | `src/canonical.ts` | number/timestamp canon + RFC 8785 serialization + set-array ordering |
 | `src/normalize.ts` | the EQUIVALENCE.md normalization / equivalence algorithm (the suite's oracle) |
+| `src/records.ts` | `CONTAINERS`: the inline-container fields per `recordType` (§5.1), shared by `validate.ts` and `normalize.ts` |
 | `src/validate.ts` | JSON Schema validation (ajv), browser-safe — validates against the vendored schema, no `node:*` imports |
 | `src/schema-loader-node.ts` | Node-only: `OPENBODY_STANDARD`-aware schema resolution + `standardDir`, used by dev/test scripts; not exported from `src/index.ts` |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
 | `src/errors.ts` | the typed error hierarchy (`OpenBodyError` / `MapperInputError` / `NormalizeError` / `ParseError`) + the per-layer error policy |
 | `src/resolve.ts` | §6.5 exercise-name resolver (`resolveExerciseRef` / `sourceNameForId`), browser-safe — static import of the vendored crosswalk snapshot |
-| `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index; `to-strong.ts` is the reverse (OpenBody → Strong CSV) mapper |
-| `scripts/run-vectors.ts` | conformance-vector runner |
+| `src/mappers/index.ts` | the mapper SDK barrel — every inbound + outbound mapper re-exported from here (and from `src/index.ts`) |
+| `src/mappers/{hevy,strong,strava,apple-health,fit,fitbit,gpx,tcx,concept2,thecrag}.ts` | the 10 inbound mappers — incumbent export format → OpenBody wire records (`{ records, warnings }`) |
+| `src/mappers/to-strong.ts` | the one outbound mapper — OpenBody → Strong-importable CSV (`{ csv, omissions }`) |
+| `src/mappers/{csv,xml,shared}.ts` | internal mapper plumbing (quoted-CSV parsing, regex-XML parsing, cross-format telemetry helpers) — deliberately not re-exported from the package entry |
+| `test/*.test.ts` | vitest suite for the core: lossless parse, canonical form, conformance vectors, resolver, validate |
+| `test/mappers/*.test.ts` | one vitest file per mapper (inbound + `to-strong`), plus `test/helpers.ts` for shared assertions (`expectAllValid`, `expectRoundTripStable`, `readExample`, …) |
+| `examples/` | runnable dogfooding scripts, one directory per format (`map-<format>.ts` + sample fixture(s) + a per-directory README) — see `examples/README.md` |
+| `scripts/run-vectors.ts` | conformance-vector runner (`npm run vectors`) |
+| `scripts/pin-expected.ts` | dev tool: regenerates a conformance vector's pinned `expected` canonical form from this implementation |
 | `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |
 | `scripts/sync-crosswalk.mjs` | builds `vendor/crosswalk.json` (registry name index + per-app alias tables) from the sibling `openbody-registry` repo |
 | `vendor/` | gitignored; populated by `sync-schema` + `sync-crosswalk`, shipped in the published package |
