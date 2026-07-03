@@ -13,6 +13,11 @@ on:
 jobs:
   conformance:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.19 is the package's engines floor (import attributes).
+        node-version: ["20.19", "22", "24"]
     steps:
       - name: Checkout openbody-ts
         uses: actions/checkout@v4
@@ -40,7 +45,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: openbody-ts/package-lock.json
 
@@ -57,8 +62,13 @@ jobs:
           npm run sync-schema
           npm run sync-crosswalk
 
-      - name: Conformance (typecheck + lossless + vectors + resolver + mappers)
+      - name: Test (typecheck + vitest — lossless/vectors/resolver/mappers/validate)
         working-directory: openbody-ts
         env:
           OPENBODY_STANDARD: ${{ github.workspace }}/openbody
+          OPENBODY_REGISTRY: ${{ github.workspace }}/openbody-registry
         run: npm test
+
+      - name: Pack sanity (files list + publishability)
+        working-directory: openbody-ts
+        run: npm pack --dry-run

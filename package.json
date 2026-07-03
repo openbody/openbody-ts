@@ -41,14 +41,9 @@
   ],
   "scripts": {
     "vectors": "tsx scripts/run-vectors.ts",
-    "lossless": "tsx scripts/test-lossless.ts",
-    "mappers": "tsx scripts/test-mappers.ts",
-    "tcx-gpx": "tsx scripts/test-tcx-gpx.ts",
-    "fitbit": "tsx scripts/test-fitbit.ts",
-    "concept2-thecrag": "tsx scripts/test-concept2-thecrag.ts",
-    "resolve": "tsx scripts/test-resolve.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && npm run lossless && npm run vectors && npm run resolve && npm run mappers && npm run tcx-gpx && npm run fitbit && npm run concept2-thecrag",
+    "test": "npm run typecheck && vitest run",
+    "coverage": "vitest run --coverage",
     "sync-schema": "node scripts/sync-schema.mjs",
     "sync-crosswalk": "node scripts/sync-crosswalk.mjs",
     "build": "tsc -p tsconfig.build.json",
@@ -61,7 +56,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^4.1.9",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.9"
   }
 }
