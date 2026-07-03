@@ -23,12 +23,11 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "suspicious": {
-        // Deliberate Record<string, any> wire types remain until the typed-wire work package;
-        // keep visible as warnings without failing `biome check`.
-        "noExplicitAny": "warn"
-      }
+      // noExplicitAny runs at its default severity again: the typed-wire work package
+      // (WP6) replaced the Record<string, any> wire types with src/types.ts; the few
+      // deliberate `any`s left (the ajv interop casts and the WireRecord escape hatch)
+      // carry inline biome-ignore comments.
+      "preset": "recommended"
     }
   },
   "overrides": [
