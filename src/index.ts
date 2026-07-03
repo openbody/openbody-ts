@@ -11,5 +11,5 @@ export { parseLossless, LosslessNumber } from "./parse.js";
 export { resolveExerciseRef, sourceNameForId } from "./resolve.js";
 export type { ResolvedExerciseRef, ResolveOptions } from "./resolve.js";
 export { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong } from "./mappers/index.js";
-export type { OpenBodyRecord, MapOptions } from "./mappers/index.js";
+export type { OpenBodyRecord, MapOptions, ToStrongOptions, ToStrongResult, StrongOmission } from "./mappers/index.js";
 export type { Json, FixedPoint } from "./canonical.js";

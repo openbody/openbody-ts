@@ -7,6 +7,8 @@ export { mapStrong } from "./strong.js";
 export { mapStrava, type StravaInput } from "./strava.js";
 export { mapAppleHealth } from "./apple-health.js";
 export { mapFit, type FitInput } from "./fit.js";
-// Outbound (OpenBody → incumbent): the mirror direction, currently just Strong.
-export { mapOpenBodyToStrong } from "./to-strong.js";
+// Outbound (OpenBody → incumbent): the mirror direction, currently just Strong. Returns
+// { csv, omissions } — SPEC §10's directional-lossless rule: emitting into a less-expressive
+// target is best-effort, and every material loss is reported (or throws with { strict: true }).
+export { mapOpenBodyToStrong, type ToStrongOptions, type ToStrongResult, type StrongOmission } from "./to-strong.js";
 export { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";

@@ -20,8 +20,15 @@ records, plus a conformance-vector runner.
 - **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health,
   FIT; Health Connect via the Apple mapper): pure functions with round-trip tests
   (`npm run mappers`). Plus one outbound mapper, OpenBody → Strong CSV
-  (`mapOpenBodyToStrong`), for the reverse direction (resistance-training `reps` sets only —
-  see `src/mappers/to-strong.ts` for v1 scope).
+  (`mapOpenBodyToStrong`) — the import path into Strong *and* Hevy (which accepts
+  Strong-format CSVs). Covers everything Strong's CSV can hold: reps ± weight,
+  bodyweight, duration and distance sets, RPE, notes — with non-kg/m/s units converted
+  by exact decimal math. Anything Strong can't represent (supersets/round schemes,
+  %1RM loads, energy scoring, …) degrades gracefully per the documented policy and is
+  reported in the returned `{ csv, omissions }` (SPEC §10: emitting into a
+  less-expressive target is best-effort, bounded by the target); pass
+  `{ strict: true }` to throw instead. See `src/mappers/to-strong.ts` for the full
+  policy.
 - **`resolveExerciseRef(name, { source })`** — the §6.5 producer-side matching ladder:
   raw app exercise names → canonical registry ids, with the original string preserved
   losslessly (see "Exercise-name resolution" below). Wired into the Hevy/Strong mappers.

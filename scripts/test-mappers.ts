@@ -37,33 +37,98 @@ for (const c of cases) {
   else console.log(`  ok   ${c.name} — ${c.records.length} wire records validate; ${n1.length} canonical (round-trip stable)`);
 }
 
-// Outbound round-trip: mapOpenBodyToStrong is the mirror of mapStrong. v1 only covers
-// `scoring: "reps"` sets (see to-strong.ts header), so derive a representative Strong sample
-// from the real fixture, keeping just its reps-based rows (drops the Plank/time-based row).
+// Outbound round-trip: mapOpenBodyToStrong is the mirror of mapStrong. It now covers the
+// full fixture — including the Plank duration-scored row — with zero omissions.
 let total = cases.length;
 {
   const name = "to-strong (outbound)";
   total++;
   const errs: string[] = [];
-  const fullRows = parseCsv(read("strong/strong-sample.csv"));
-  const repsRows = fullRows.filter((r) => Number(r.Reps) > 0);
-  const header = "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No";
-  const cols = ["Date", "Workout Name", "Duration", "Exercise Name", "Set Order", "Weight", "Reps", "Distance", "Seconds", "Notes", "Workout No"];
-  const strongCsv = [header, ...repsRows.map((r) => cols.map((c) => r[c]).join(","))].join("\n") + "\n";
+  const original = mapStrong(read("strong/strong-sample.csv"));
+  const out = mapOpenBodyToStrong(original);
+  const roundTripped = mapStrong(out.csv);
 
-  const original = mapStrong(strongCsv);
-  const outCsv = mapOpenBodyToStrong(original);
-  const roundTripped = mapStrong(outCsv);
-
-  if (original.length === 0) errs.push("derived reps-only fixture mapped 0 records");
+  if (original.length === 0) errs.push("fixture mapped 0 records");
+  if (out.omissions.length) errs.push(`expected 0 omissions for the Strong fixture, got: ${JSON.stringify(out.omissions)}`);
   for (const r of roundTripped) {
     const v = validate(r);
     if (!v.valid) errs.push(`round-tripped wire ${r.recordType} ${r.id}: ${v.errors}`);
   }
   if (!equivalent(original, roundTripped)) errs.push("outbound round-trip (Strong → OpenBody → Strong → OpenBody) not equivalent");
+  // The duration-scored Plank row must survive: Seconds column carries the hold time.
+  const plank = parseCsv(out.csv).find((r) => r["Exercise Name"] === "Plank");
+  if (plank?.Seconds !== "60") errs.push(`Plank duration set: expected Seconds=60, got ${JSON.stringify(plank)}`);
 
   if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
-  else console.log(`  ok   ${name} — ${original.length} sessions/exercises/work units round-trip through Strong CSV`);
+  else console.log(`  ok   ${name} — ${original.length} session(s) incl. a duration set round-trip through Strong CSV, 0 omissions`);
+}
+
+// Outbound coverage: what Strong's CSV can hold (duration/distance/bodyweight/kg-conversion/
+// RPE) maps faithfully; what it can't (supersets, %1RM) degrades per the documented policy
+// into a machine-readable omissions report — and `{ strict: true }` throws instead.
+{
+  const name = "to-strong coverage + degradation policy";
+  total++;
+  const errs: string[] = [];
+  const session = (over: Record<string, any>): Record<string, any> => ({
+    id: "s1", recordType: "Session", subject: "subj-001", disciplines: ["strength"],
+    startTime: "2026-01-01T10:00:00Z", endTime: "2026-01-01T11:00:00Z", name: "Test", ...over,
+  });
+  const exercise = (workUnits: Record<string, any>[], id = "e1"): Record<string, any> =>
+    ({ id, recordType: "Exercise", exerciseRef: { opaque: "Some Movement" }, workUnits });
+  const row = (records: Record<string, any>[]) => {
+    const out = mapOpenBodyToStrong(records);
+    return { ...out, rows: parseCsv(out.csv) };
+  };
+
+  // duration set: explicit non-second unit converts exactly (2 min → 120 s).
+  const dur = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "time", performance: { time: { absolute: { value: 2, unit: "min" } } } }])] })]);
+  if (dur.rows[0]?.Seconds !== "120" || dur.omissions.length) errs.push(`duration set: Seconds=${dur.rows[0]?.Seconds}, omissions=${dur.omissions.length}`);
+
+  // distance set: km → Strong's metres, exact decimal shift (5.3 km → 5300, no float dust);
+  // round-trips through mapStrong as { value: 5300, unit: "m" }.
+  const dist = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "distance", performance: { distance: { absolute: { value: 5.3, unit: "km" } } } }])] })]);
+  if (dist.rows[0]?.Distance !== "5300" || dist.omissions.length) errs.push(`distance set: Distance=${dist.rows[0]?.Distance} (want 5300), omissions=${dist.omissions.length}`);
+  const distBack = mapStrong(dist.csv)[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.distance;
+  if (JSON.stringify(distBack) !== JSON.stringify({ absolute: { value: 5300, unit: "m" } })) errs.push(`distance re-import: ${JSON.stringify(distBack)}`);
+
+  // bodyweight / reps-only set: Reps carried, Weight stays 0, no load on re-import.
+  const bw = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 12 } }])] })]);
+  if (bw.rows[0]?.Reps !== "12" || bw.rows[0]?.Weight !== "0" || bw.omissions.length) errs.push(`bodyweight set: ${JSON.stringify(bw.rows[0])}, omissions=${bw.omissions.length}`);
+  if (mapStrong(bw.csv)[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.load !== undefined) errs.push("bodyweight set: re-import grew a load");
+
+  // kg conversion: [lb_av] → kg with exact decimal math (225 lb → 102.05828325 kg).
+  const lb = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 5, load: { value: 225, unit: "[lb_av]", basis: "marked_weight" } } }])] })]);
+  if (lb.rows[0]?.Weight !== "102.05828325" || lb.omissions.length) errs.push(`lb→kg: Weight=${lb.rows[0]?.Weight} (want 102.05828325), omissions=${lb.omissions.length}`);
+
+  // RPE where present → the RPE column.
+  const rpe = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 5, effortLoad: [{ kind: "internal", method: "RPE", value: 8.5 }] } }])] })]);
+  if (rpe.rows[0]?.RPE !== "8.5" || rpe.omissions.length) errs.push(`RPE: ${rpe.rows[0]?.RPE}, omissions=${rpe.omissions.length}`);
+
+  // omissions: a superset Block flattens to plain sets (both rows emitted) and a %1RM load
+  // has no absolute kg value — both reported with recordIds, neither fatal.
+  const lossy = [session({
+    blocks: [{
+      id: "blk1", recordType: "Block", grouping: "superset",
+      children: [
+        exercise([{ id: "w1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 5, load: { value: { relativeToThreshold: { percent: 80, of: "1RM" } }, basis: "marked_weight" } } }], "e1"),
+        exercise([{ id: "w2", recordType: "WorkUnit", scoring: "reps", performance: { reps: 10 } }], "e2"),
+      ],
+    }],
+  })];
+  const deg = row(lossy);
+  if (deg.rows.length !== 2) errs.push(`superset flatten: expected 2 rows, got ${deg.rows.length}`);
+  if (!deg.omissions.some((o) => o.recordId === "blk1" && o.field === "grouping")) errs.push(`no grouping omission: ${JSON.stringify(deg.omissions)}`);
+  if (!deg.omissions.some((o) => o.recordId === "w1" && o.field === "load")) errs.push(`no %1RM load omission: ${JSON.stringify(deg.omissions)}`);
+  if (deg.rows[0]?.Weight !== "0" || deg.rows[0]?.Reps !== "5") errs.push(`%1RM set should keep reps, zero weight: ${JSON.stringify(deg.rows[0])}`);
+
+  // strict mode: the same document throws instead of degrading.
+  let threw = false;
+  try { mapOpenBodyToStrong(lossy, { strict: true }); } catch { threw = true; }
+  if (!threw) errs.push("strict mode did not throw on a lossy document");
+
+  if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
+  else console.log(`  ok   ${name} — duration/distance/bodyweight/lb→kg/RPE map; superset+%1RM degrade with ${deg.omissions.length} reported omissions; strict throws`);
 }
 
 // Resolver wiring (OB-65): mapped Hevy/Strong exercises climb the §6.5 ladder — known
@@ -103,7 +168,7 @@ let total = cases.length;
   if (sBench?.id !== "bench-press.barbell.flat") errs.push(`strong: Bench Press (Barbell) → ${sBench?.id}`);
 
   // Hevy → OpenBody → Strong CSV: the emitted Exercise Name column is Hevy's original.
-  const outCsv = mapOpenBodyToStrong(hevyRecords);
+  const outCsv = mapOpenBodyToStrong(hevyRecords).csv;
   const outNames = new Set(parseCsv(outCsv).map((r) => r["Exercise Name"]));
   for (const orig of Object.keys(expect)) {
     if (!outNames.has(orig)) errs.push(`hevy→strong CSV dropped/renamed "${orig}" (got: ${[...outNames].join(" | ")})`);
