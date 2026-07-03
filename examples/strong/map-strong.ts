@@ -3,15 +3,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/validate.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapStrong } from "../../src/mappers/index.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapStrong(fs.readFileSync(path.join(here, "strong-sample.csv"), "utf8"));
 
 console.log(`Mapped Strong CSV -> ${records.length} OpenBody Session(s).\n`);
-console.log("Session (wire):\n" + JSON.stringify(records[0], null, 2) + "\n");
+console.log(`Session (wire):\n${JSON.stringify(records[0], null, 2)}\n`);
 let bad = 0;
 for (const r of records) {
   const v = validate(r);

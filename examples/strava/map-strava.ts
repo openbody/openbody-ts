@@ -4,9 +4,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/validate.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapStrava } from "../../src/mappers/index.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const input = JSON.parse(fs.readFileSync(path.join(here, "strava-sample.json"), "utf8"));
@@ -14,11 +14,11 @@ const records = mapStrava(input);
 const session = records[records.length - 1];
 
 console.log(`Mapped Strava activity -> ${records.length} OpenBody records.\n`);
-console.log("Session (wire):\n" + JSON.stringify(session, null, 2) + "\n");
+console.log(`Session (wire):\n${JSON.stringify(session, null, 2)}\n`);
 let bad = 0;
 for (const r of records) {
   const v = validate(r);
-  console.log(`  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id}${v.valid ? "" : " — " + v.errors}`);
+  console.log(`  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id}${v.valid ? "" : ` — ${v.errors}`}`);
   if (!v.valid) bad++;
 }
 console.log(bad ? `\n${bad} wire record(s) invalid` : `\nAll ${records.length} wire records validate. ✅`);

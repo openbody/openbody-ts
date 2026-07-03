@@ -10,9 +10,9 @@
 // implementation.
 import fs from "node:fs";
 import path from "node:path";
-import { normalizeDocument, equivalent } from "./normalize.js";
-import { validate, standardDir } from "./schema-loader-node.js";
+import { equivalent, normalizeDocument } from "./normalize.js";
 import { parseLossless } from "./parse.js";
+import { standardDir, validate } from "./schema-loader-node.js";
 
 export { standardDir };
 

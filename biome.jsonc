@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!dist", "!vendor", "!node_modules", "!coverage", "!examples/**/*.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        // Deliberate Record<string, any> wire types remain until the typed-wire work package;
+        // keep visible as warnings without failing `biome check`.
+        "noExplicitAny": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // CSV mappers deliberately use uniform bracket access with the literal CSV header
+      // name for every column (r["Type"] next to r["Log ID"]); dot access for the
+      // single-word headers would make the column references inconsistent.
+      "includes": ["src/mappers/concept2.ts", "src/mappers/thecrag.ts"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "useLiteralKeys": "off"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -86,12 +86,14 @@ runtime. `npm run build` compiles `src/` to `dist/` (ESM + `.d.ts`); `npm pack
 npm install
 npm run sync-schema     # vendor the schema snapshot from ../openbody (typecheck needs it)
 npm run sync-crosswalk  # vendor the exercise-name data from ../openbody-registry (ditto)
-npm test           # typecheck + the vitest suite (test/: lossless, vectors, resolver, mappers, validate)
+npm test           # typecheck + biome lint + the vitest suite (test/: lossless, vectors, resolver, mappers, validate)
 # …or individually:
 npm run vectors    # run the standard's conformance vectors against this impl (CLI wrapper)
 npx vitest run test/mappers      # just the mapper suites
 npm run coverage   # vitest with v8 coverage (thresholds enforced on src/)
 npm run typecheck
+npm run lint       # biome check (lint + format verification; config in biome.jsonc)
+npm run format     # biome format --write
 npm run build      # compile src/ -> dist/
 ```
 

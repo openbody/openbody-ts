@@ -51,14 +51,15 @@
 //     no canonical registry id (the registry's `air-bike` is a fan bike, `cycling` a road
 //     ride), so it stays opaque-only. The raw Type string always rides in
 //     `exerciseRef.opaque` (§6.5 lossless floor).
-import { parseCsv, num, toRfc3339 } from "./csv.js";
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+
+import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
 function parseClock(s: string | undefined): number | undefined {
   if (!s) return undefined;
   const parts = s.trim().split(":");
-  if (parts.some((p) => p === "" || isNaN(Number(p)))) return undefined;
+  if (parts.some((p) => p === "" || Number.isNaN(Number(p)))) return undefined;
   return parts.reduce((acc, p) => acc * 60 + Number(p), 0);
 }
 
@@ -155,7 +156,7 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
     const off = opts.utcOffset ?? "Z";
     const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
-    const end = new Date(Date.parse(wall + "Z") + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
+    const end = new Date(Date.parse(`${wall}Z`) + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
     const prov = {
       method: "sensor",
       sourceApp: "concept2",

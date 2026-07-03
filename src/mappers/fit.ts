@@ -16,7 +16,7 @@
 // with a decoder of their choice (e.g. `fit-file-parser`, MIT) and hands over the resulting
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 interface DecodedRecord {
   timestamp: string;

@@ -119,7 +119,8 @@ function buildIndexes(): Indexes {
 }
 
 function getIndexes(): Indexes {
-  return (indexes ??= buildIndexes());
+  if (!indexes) indexes = buildIndexes();
+  return indexes;
 }
 
 function lookup(index: Index, key: string): string | undefined {

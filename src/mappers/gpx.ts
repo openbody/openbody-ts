@@ -38,7 +38,7 @@
 // - The <gpx creator="…"> attribute is free-form vendor text, not a registry token,
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 // ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
 const NAME = "[A-Za-z_][\\w.-]*";

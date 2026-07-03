@@ -4,15 +4,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/schema-loader-node.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapTheCrag } from "../../src/mappers/thecrag.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/schema-loader-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapTheCrag(fs.readFileSync(path.join(here, "thecrag-sample.csv"), "utf8"));
 
 console.log(`Mapped theCrag logbook CSV -> ${records.length} OpenBody Session record(s).\n`);
-console.log("Session JSON (wire form):\n" + JSON.stringify(records[0], null, 2) + "\n");
+console.log(`Session JSON (wire form):\n${JSON.stringify(records[0], null, 2)}\n`);
 
 let bad = 0;
 for (const rec of records) {

@@ -5,9 +5,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/validate.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapAppleHealth } from "../../src/mappers/index.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapAppleHealth(fs.readFileSync(path.join(here, "export-sample.xml"), "utf8"));
@@ -17,7 +17,7 @@ let bad = 0;
 for (const r of records) {
   const v = validate(r);
   console.log(
-    `  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id} (${r.type ?? r.disciplines?.[0]}${r.category ? "=" + r.category : ""})${v.valid ? "" : " — " + v.errors}`,
+    `  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id} (${r.type ?? r.disciplines?.[0]}${r.category ? `=${r.category}` : ""})${v.valid ? "" : ` — ${v.errors}`}`,
   );
   if (!v.valid) bad++;
 }

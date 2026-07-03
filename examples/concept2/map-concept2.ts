@@ -4,16 +4,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/schema-loader-node.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapConcept2 } from "../../src/mappers/concept2.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/schema-loader-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapConcept2(fs.readFileSync(path.join(here, "concept2-season-sample.csv"), "utf8"));
 
 console.log(`Mapped Concept2 season CSV -> ${records.length} OpenBody record(s).\n`);
 const intervals = records.find((r) => r.recordType === "Session" && r.blocks);
-console.log("Interval Session JSON (wire form):\n" + JSON.stringify(intervals, null, 2) + "\n");
+console.log(`Interval Session JSON (wire form):\n${JSON.stringify(intervals, null, 2)}\n`);
 
 let bad = 0;
 for (const rec of records) {

@@ -1,7 +1,8 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
-import { parseCsv, num, toRfc3339, contentHash } from "./csv.js";
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+
 import { resolveExerciseRef } from "../resolve.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
 export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -26,7 +27,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
     // Wall-clock + Duration arithmetic on a fixed UTC anchor (a constant offset cancels in
     // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
     const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
-    const end = new Date(Date.parse(wall + "Z") + Number(f.Duration || 0) * 1000).toISOString().slice(0, 19) + off;
+    const end = new Date(Date.parse(`${wall}Z`) + Number(f.Duration || 0) * 1000).toISOString().slice(0, 19) + off;
     const session: OpenBodyRecord = {
       // The export has no workout id of its own, so the natural key (Date|Workout Name) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering

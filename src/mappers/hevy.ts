@@ -1,7 +1,8 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
-import { parseCsv, num, toRfc3339, contentHash } from "./csv.js";
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+
 import { resolveExerciseRef } from "../resolve.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
@@ -80,7 +81,9 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
           blocks.push({ id: `${session.id}-blk${i}`, recordType: "Block", children: [makeExercise(g, i)] });
         else {
           const mates = exGroups.map((gg, k) => ({ gg, k })).filter(({ gg }) => gg.superset === g.superset);
-          mates.forEach(({ k }) => used.add(k));
+          mates.forEach(({ k }) => {
+            used.add(k);
+          });
           blocks.push({
             id: `${session.id}-ss${g.superset}`,
             recordType: "Block",

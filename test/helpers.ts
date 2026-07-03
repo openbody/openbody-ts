@@ -4,8 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
-import { validate } from "../src/schema-loader-node.js";
 import { normalizeDocument } from "../src/normalize.js";
+import { validate } from "../src/schema-loader-node.js";
 import type { OpenBodyRecord } from "../src/types.js";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,7 +55,10 @@ if (!haveRegistry) {
 export function collectExerciseRefIds(records: OpenBodyRecord[]): Set<string> {
   const ids = new Set<string>();
   const walk = (o: any): void => {
-    if (Array.isArray(o)) return o.forEach(walk);
+    if (Array.isArray(o)) {
+      o.forEach(walk);
+      return;
+    }
     if (o && typeof o === "object") {
       if (o.exerciseRef) {
         const id = typeof o.exerciseRef === "string" ? o.exerciseRef : o.exerciseRef.id;

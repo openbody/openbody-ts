@@ -2,19 +2,20 @@
 // Each mapper is a pure function (input → records[]); validate/normalize with the
 // core (`validate`, `normalizeDocument`). Health Connect is covered by the Apple
 // Health mapper (documented identical mapping).
-export { mapHevy } from "./hevy.js";
-export { mapStrong } from "./strong.js";
-export { mapStrava, type StravaInput } from "./strava.js";
+
 export { mapAppleHealth } from "./apple-health.js";
-export { mapFit, type FitInput } from "./fit.js";
-export { mapGpx } from "./gpx.js";
-export { mapTcx } from "./tcx.js";
-export { mapFitbitTakeout, type FitbitFile, type FitbitMapOptions } from "./fitbit.js";
 export { mapConcept2 } from "./concept2.js";
+export { type FitInput, mapFit } from "./fit.js";
+export { type FitbitFile, type FitbitMapOptions, mapFitbitTakeout } from "./fitbit.js";
+export { mapGpx } from "./gpx.js";
+export { mapHevy } from "./hevy.js";
+export { mapStrava, type StravaInput } from "./strava.js";
+export { mapStrong } from "./strong.js";
+export { mapTcx } from "./tcx.js";
 export { mapTheCrag } from "./thecrag.js";
 // Outbound (OpenBody → incumbent): the mirror direction, currently just Strong. Returns
 // { csv, omissions } — SPEC §10's directional-lossless rule: emitting into a less-expressive
 // target is best-effort, and every material loss is reported (or throws with { strict: true }).
-export { mapOpenBodyToStrong, type ToStrongOptions, type ToStrongResult, type StrongOmission } from "./to-strong.js";
+export { mapOpenBodyToStrong, type StrongOmission, type ToStrongOptions, type ToStrongResult } from "./to-strong.js";
 // Internal plumbing (parseCsv/num/toRfc3339/contentHash) stays in ./csv.js — import it
 // directly within this repo; it is deliberately not part of the public barrel.

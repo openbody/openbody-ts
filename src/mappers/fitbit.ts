@@ -36,7 +36,7 @@
 // UTC (mapped with "Z"); everything else is local wall-clock time — pass opts.utcOffset
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 export interface FitbitFile {
   name: string;
@@ -92,7 +92,7 @@ const usToIso = (s: string): string | undefined => {
 };
 const stripFrac = (iso: string) => iso.replace(/\.\d+$/, "");
 // Fixed anchor for duration/offset arithmetic only (constant offset cancels in differences).
-const epoch = (localIso: string) => Date.parse(stripFrac(localIso) + "Z");
+const epoch = (localIso: string) => Date.parse(`${stripFrac(localIso)}Z`);
 const isoAt = (e: number) => new Date(e).toISOString().slice(0, 19);
 // Exact decimal → §4.2 fixed-point (lossless for the ≤2-decimal values Fitbit exports).
 const fixed = (n: number): number | { coefficient: number; exponent: number } => {
@@ -137,7 +137,10 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
     for (const en of entries.sort((a, b) => a.e - b.e)) {
       const day = isoAt(en.e).slice(0, 10);
       let bucket = byDay.get(day);
-      if (bucket === undefined) byDay.set(day, (bucket = []));
+      if (bucket === undefined) {
+        bucket = [];
+        byDay.set(day, bucket);
+      }
       bucket.push(en);
     }
     for (const [day, ens] of byDay) {
@@ -279,7 +282,7 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
           }
           segs = next.sort((a, b) => a.s - b.s);
         }
-        segs.forEach((g, i) =>
+        segs.forEach((g, i) => {
           records.push({
             id: `${lid}-s${i}`,
             recordType: "Measurement",
@@ -289,8 +292,8 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
             startTime: isoAt(g.s) + off,
             endTime: isoAt(g.e) + off,
             provenance: prov("sensor"),
-          }),
-        );
+          });
+        });
         // Fitbit-computed summaries → registry sleep duration tokens (quantity over the window).
         if (log.minutesAsleep != null)
           records.push({

@@ -4,14 +4,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mapStrong, mapOpenBodyToStrong } from "../../src/mappers/index.js";
+import { mapOpenBodyToStrong, mapStrong } from "../../src/mappers/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapStrong(fs.readFileSync(path.join(here, "strong-sample.csv"), "utf8"));
 
 // Faithful case: everything in the sample fits Strong's columns → zero omissions.
 const out = mapOpenBodyToStrong(records);
-console.log("OpenBody -> Strong CSV:\n\n" + out.csv);
+console.log(`OpenBody -> Strong CSV:\n\n${out.csv}`);
 console.log(`Omissions: ${out.omissions.length} (fixture is fully representable)\n`);
 
 // Degraded case: a %1RM load has no absolute kg value Strong can hold. The set is still

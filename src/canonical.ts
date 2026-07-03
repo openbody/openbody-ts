@@ -1,6 +1,7 @@
 // Canonicalization primitives for the OpenBody normalized-equivalence method (conformance/EQUIVALENCE.md; SPEC §8.3 points there).
 import canonicalizeMod from "canonicalize";
 import { LosslessNumber } from "./parse.js";
+
 // canonicalize is CJS (module.exports = fn); cast fixes NodeNext default-import types.
 const canonicalize = canonicalizeMod as unknown as (v: unknown) => string | undefined;
 

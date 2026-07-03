@@ -3,8 +3,8 @@
 // degradation policy (omissions report + strict mode), Session.workUnits handling,
 // and cross-app name preservation. Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
-import { mapHevy, mapStrong, mapOpenBodyToStrong } from "../../src/mappers/index.js";
 import { parseCsv } from "../../src/mappers/csv.js";
+import { mapHevy, mapOpenBodyToStrong, mapStrong } from "../../src/mappers/index.js";
 import { equivalent } from "../../src/normalize.js";
 import type { OpenBodyRecord } from "../../src/types.js";
 import { expectAllValid, readExample } from "../helpers.js";

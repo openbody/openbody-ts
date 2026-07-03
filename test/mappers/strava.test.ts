@@ -3,7 +3,7 @@
 // Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
 import { mapStrava } from "../../src/mappers/index.js";
-import { expectValidAndStable, expectAllValid, readExample } from "../helpers.js";
+import { expectAllValid, expectValidAndStable, readExample } from "../helpers.js";
 
 const sample = () => JSON.parse(readExample("strava/strava-sample.json"));
 

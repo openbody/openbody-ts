@@ -4,8 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeDocument } from "../src/normalize.js";
-import { standardDir } from "../src/schema-loader-node.js";
 import { parseLossless } from "../src/parse.js";
+import { standardDir } from "../src/schema-loader-node.js";
 
 const vdir = path.join(standardDir, "conformance/vectors");
 let pinned = 0;
@@ -18,7 +18,7 @@ for (const f of fs.readdirSync(vdir).sort()) {
   // Normalize from the lossless parse (matches the runner; §8.3 step 1).
   const input = (parseLossless(text) as any).input;
   v.expected = normalizeDocument(input);
-  fs.writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
+  fs.writeFileSync(p, `${JSON.stringify(v, null, 2)}\n`);
   console.log(`pinned ${f} (${v.expected.length} records)`);
   pinned++;
 }

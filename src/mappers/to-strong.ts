@@ -40,10 +40,11 @@
 //
 // `{ strict: true }` inverts the policy for programmatic users who prefer failure to loss:
 // the first would-be omission throws instead.
-import type { OpenBodyRecord, MapOptions } from "../types.js";
-import { sourceNameForId } from "../resolve.js";
-import { LosslessNumber } from "../parse.js";
+
 import { canonNumber, isFixedPointLike } from "../canonical.js";
+import { LosslessNumber } from "../parse.js";
+import { sourceNameForId } from "../resolve.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 const HEADER = [
   "Date",
@@ -111,7 +112,7 @@ function fixedPointToPlain(coefficient: string, exponent: string): string {
   if (exp >= 0) s = s + "0".repeat(exp);
   else {
     const point = s.length + exp; // digits left of the decimal point
-    s = point <= 0 ? "0." + "0".repeat(-point) + s : s.slice(0, point) + "." + s.slice(point);
+    s = point <= 0 ? `0.${"0".repeat(-point)}${s}` : `${s.slice(0, point)}.${s.slice(point)}`;
   }
   return (neg ? "-" : "") + s;
 }
@@ -383,5 +384,5 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
   }
 
   const lines = [HEADER, ...rows].map((r) => r.map(csvEscape).join(","));
-  return { csv: lines.join("\n") + "\n", omissions };
+  return { csv: `${lines.join("\n")}\n`, omissions };
 }

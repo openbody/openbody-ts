@@ -1,7 +1,7 @@
 // Apple Health export.xml → OpenBody Measurements (discrete/interval quantity, sleep
 // category series) + HKWorkout → Session. Health Connect maps identically (documented
 // parity); this mapper covers both shapes.
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 const attrs = (el: string) => Object.fromEntries([...el.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 const rfc = (s: string) =>
@@ -20,7 +20,7 @@ const DISC: Record<string, string> = {
   HKWorkoutActivityTypeRunning: "running",
   HKWorkoutActivityTypeCycling: "cycling",
 };
-const typeFor = (hk: string, map: Record<string, string>) => map[hk] ?? "apple:" + hk;
+const typeFor = (hk: string, map: Record<string, string>) => map[hk] ?? `apple:${hk}`;
 
 /** Map an Apple Health export.xml string to OpenBody wire records. */
 export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -34,7 +34,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
     i++; // group 1 always captures (possibly ""); ?? only satisfies the checker
     const prov = { method: "sensor", sourceApp: "apple", device: { manufacturer: "apple", model: a.sourceName } };
     if (a.type?.startsWith("HKQuantityTypeIdentifier")) {
-      const id = "apple-q-" + i;
+      const id = `apple-q-${i}`;
       records.push({
         id,
         recordType: "Measurement",
@@ -55,7 +55,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
         .replace(/([a-z])([A-Z])/g, "$1_$2")
         .toLowerCase();
       records.push({
-        id: "apple-sleep-" + i,
+        id: `apple-sleep-${i}`,
         recordType: "Measurement",
         subject,
         type: "sleep_stage",
@@ -84,7 +84,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
       we = Date.parse(end);
     const measuredBy = hrRecords.filter((h) => h.s >= ws && h.e <= we).map((h) => ({ type: "measuredBy", ref: h.ref }));
     records.push({
-      id: "apple-workout-" + i,
+      id: `apple-workout-${i}`,
       recordType: "Session",
       subject,
       disciplines: [typeFor(a.workoutActivityType, DISC)],
@@ -94,7 +94,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
       provenance: { method: "sensor", sourceApp: "apple", device: { manufacturer: "apple", model: a.sourceName } },
       workUnits: [
         {
-          id: "apple-workout-" + i + "-wu",
+          id: `apple-workout-${i}-wu`,
           recordType: "WorkUnit",
           scoring: "continuous",
           performance: perf,

@@ -4,15 +4,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validate } from "../../src/validate.js";
-import { normalizeDocument } from "../../src/normalize.js";
 import { mapHevy } from "../../src/mappers/index.js";
+import { normalizeDocument } from "../../src/normalize.js";
+import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const records = mapHevy(fs.readFileSync(path.join(here, "hevy-sample.csv"), "utf8"));
 
 console.log(`Mapped Hevy CSV -> ${records.length} OpenBody Session record(s).\n`);
-console.log("Session JSON (wire form):\n" + JSON.stringify(records[0], null, 2) + "\n");
+console.log(`Session JSON (wire form):\n${JSON.stringify(records[0], null, 2)}\n`);
 
 let bad = 0;
 for (const rec of records) {

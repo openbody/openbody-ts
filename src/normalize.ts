@@ -167,7 +167,8 @@ function injectRoundMetric(rec: Rec, value: any): void {
   if (rec?.recordType === "WorkUnit") {
     const metric = SCORING_PRIMARY_METRIC[rec.scoring];
     if (metric) {
-      const p = rec.prescription || (rec.prescription = {});
+      if (!rec.prescription) rec.prescription = {};
+      const p = rec.prescription;
       if (p[metric] === undefined) p[metric] = value;
     }
   }

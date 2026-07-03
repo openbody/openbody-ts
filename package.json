@@ -42,7 +42,9 @@
   "scripts": {
     "vectors": "tsx scripts/run-vectors.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && vitest run",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "npm run typecheck && npm run lint && vitest run",
     "coverage": "vitest run --coverage",
     "sync-schema": "node scripts/sync-schema.mjs",
     "sync-crosswalk": "node scripts/sync-crosswalk.mjs",
@@ -55,6 +57,7 @@
     "canonicalize": "^2.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.2",
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.9",
     "tsx": "^4.16.0",

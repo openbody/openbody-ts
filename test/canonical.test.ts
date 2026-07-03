@@ -1,9 +1,9 @@
 // §8.3 step-1 canonicalization (canonNumber/deepCanon) + end-to-end lossless
 // normalization — ported from scripts/test-lossless.ts (B1 / OB-9).
 import { describe, expect, it } from "vitest";
-import { parseLossless, LosslessNumber } from "../src/parse.js";
 import { canonNumber, canonTimestamp, deepCanon } from "../src/canonical.js";
 import { normalizeDocument } from "../src/normalize.js";
+import { LosslessNumber, parseLossless } from "../src/parse.js";
 
 describe("canonNumber (spec examples, §8.3 step 1)", () => {
   it("37.4220 -> 37422e-3", () => {

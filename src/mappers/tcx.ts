@@ -44,7 +44,7 @@
 //   workout shape; use mapFit for a decoded workout). A file containing only those
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
-import type { OpenBodyRecord, MapOptions } from "../types.js";
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 
 // ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
 const NAME = "[A-Za-z_][\\w.-]*";

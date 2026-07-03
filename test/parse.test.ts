@@ -2,7 +2,7 @@
 // parser preserves exact decimal text where JSON.parse (float64) loses it — plus the
 // JSON grammar acceptance/rejection surface.
 import { describe, expect, it } from "vitest";
-import { parseLossless, LosslessNumber } from "../src/parse.js";
+import { LosslessNumber, parseLossless } from "../src/parse.js";
 
 describe("parseLossless preserves exact source text", () => {
   it("keeps >2^53 integer text", () => {

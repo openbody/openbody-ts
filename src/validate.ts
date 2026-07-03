@@ -14,9 +14,11 @@
 // a Node-only sibling module (not re-exported from `src/index.ts`) that resolves
 // OPENBODY_STANDARD > vendored > sibling-repo-fallback and builds its own `validate`
 // via `createValidator` below.
-import schema from "../vendor/openbody.schema.json" with { type: "json" };
+
 import Ajv2020Mod from "ajv/dist/2020.js";
 import addFormatsMod from "ajv-formats";
+import schema from "../vendor/openbody.schema.json" with { type: "json" };
+
 // ajv / ajv-formats are CJS; casts fix NodeNext default-import types (runtime is fine).
 const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>): any };
 const addFormats = addFormatsMod as unknown as (ajv: any) => void;

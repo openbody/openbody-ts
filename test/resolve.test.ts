@@ -6,8 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveExerciseRef, sourceNameForId } from "../src/resolve.js";
 import { parseCsv } from "../src/mappers/csv.js";
+import { resolveExerciseRef, sourceNameForId } from "../src/resolve.js";
 import { readExample, repoRoot, validate } from "./helpers.js";
 
 describe("rung 1: exact per-app alias match (id + lossless opaque)", () => {

@@ -53,8 +53,9 @@
 //   - blank/unknown ⇒ opaque-only
 //   The raw gear style always rides in `exerciseRef.opaque` (§6.5 lossless floor);
 //   `Ascent Gear Style` (as climbed) wins over `Route Gear Style`.
+
+import type { MapOptions, OpenBodyRecord } from "../types.js";
 import { parseCsv, toRfc3339 } from "./csv.js";
-import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
 const CLEAN = new Set([
