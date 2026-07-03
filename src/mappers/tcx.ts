@@ -44,15 +44,16 @@
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { elRe, els, first, numText, text } from "./xml.js";
 
 const wrappedValue = (xml: string, tag: string): number | undefined => {
   const el = first(xml, tag); // TCX HeartRateInBeatsPerMinute_t: <Tag><Value>n</Value></Tag>
   return el ? numText(el.inner, "Value") : undefined;
 };
-const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 const SPORT: Record<string, string> = { Running: "running", Biking: "cycling" };
+const mapSport = makeDisciplineMapper(SPORT, "tcx");
 
 interface Tp {
   time?: string;
@@ -74,7 +75,7 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     n++;
     const base = `tcx-${n}`;
     const sport = act.attrs.Sport;
-    const discipline = (sport && SPORT[sport]) || `tcx:${(sport ?? "other").toLowerCase()}`;
+    const discipline = mapSport(sport ?? "", (sport ?? "other").toLowerCase());
     const actId = text(act.inner, "Id");
     const creatorName = (() => {
       const c = first(act.inner, "Creator");
@@ -141,21 +142,18 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
         });
         measuredBy.push({ type: "measuredBy", ref: `${base}-route` });
       }
+      const pushStream = makeScalarStream({
+        records,
+        measuredBy,
+        subject,
+        offsets,
+        startTime: mStart,
+        endTime: mEnd,
+        provenance: prov("sensor"),
+      });
       const scalarStream = (id: string, type: string, unit: string, pick: (t: Tp) => number | undefined) => {
-        const data = timed.map((t) => pick(t) ?? null);
-        if (data.every((v) => v === null)) return;
-        records.push({
-          id,
-          recordType: "Measurement",
-          subject,
-          type,
-          unit,
-          sampleArray: { offsets, dataPoints: data },
-          startTime: mStart,
-          endTime: mEnd,
-          provenance: prov("sensor"),
-        });
-        measuredBy.push({ type: "measuredBy", ref: id });
+        const data = pickSeries(timed, pick);
+        if (data) pushStream(id, type, unit, data);
       };
       scalarStream(`${base}-hr`, "heart_rate", "/min", (t) => t.hr);
       scalarStream(`${base}-cadence`, "cadence", "/min", (t) => t.cad);
@@ -186,7 +184,7 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       if (intensity && intensity !== "Active") wu.setRole = `tcx:${intensity.toLowerCase()}`;
 
       if (lapStart && t != null) {
-        const lapEnd = iso(Date.parse(lapStart) + t * 1000);
+        const lapEnd = iso(new Date(Date.parse(lapStart) + t * 1000));
         const aggregate = (id: string, type: string, value: number | undefined) => {
           if (value == null) return;
           records.push({
@@ -216,7 +214,7 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     const idAsTime = actId && !Number.isNaN(Date.parse(actId)) ? actId : undefined;
     const start = laps[0]?.attrs.StartTime ?? idAsTime ?? mStart;
     const totalSec = laps.reduce((s, l) => s + (numText(l.meta, "TotalTimeSeconds") ?? 0), 0);
-    const end = mEnd ?? (start && totalSec ? iso(Date.parse(start) + totalSec * 1000) : undefined);
+    const end = mEnd ?? (start && totalSec ? iso(new Date(Date.parse(start) + totalSec * 1000)) : undefined);
 
     records.push({
       id: base,

@@ -17,6 +17,7 @@
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 
 interface DecodedRecord {
   timestamp: string;
@@ -79,7 +80,8 @@ const SPORT: Record<string, string> = {
   rowing: "rowing",
   training: "strength",
 };
-const disciplineFor = (sport?: string) => (sport && SPORT[sport]) || `fit:${sport ?? "generic"}`;
+const mapSport = makeDisciplineMapper(SPORT, "fit");
+const disciplineFor = (sport?: string) => mapSport(sport ?? "generic");
 
 const indexOf = (mi: DecodedWorkoutStep["message_index"]) => (typeof mi === "number" ? mi : mi.value);
 
@@ -215,29 +217,24 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   // `start` is defined on every path that reads it: `s` guarantees start_time, and the
   // offsets map only runs over records that exist (records[0] then supplied `start`).
   const t0 = start !== undefined ? new Date(start).getTime() : NaN;
-  const end = s
-    ? new Date(t0 + (s.total_elapsed_time ?? 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z")
-    : records[records.length - 1]?.timestamp;
+  const end = s ? iso(new Date(t0 + (s.total_elapsed_time ?? 0) * 1000)) : records[records.length - 1]?.timestamp;
   const offsets = records.map((r) => (new Date(r.timestamp).getTime() - t0) / 1000);
   const prov = (method: string) => ({ method, sourceApp: "fit" });
 
   const out: OpenBodyRecord[] = [];
   const measuredBy: OpenBodyRecord[] = [];
+  const pushStream = makeScalarStream({
+    records: out,
+    measuredBy,
+    subject,
+    offsets,
+    startTime: start,
+    endTime: end,
+    provenance: prov("sensor"),
+  });
   const scalarStream = (id: string, type: string, unit: string, pick: (r: DecodedRecord) => number | undefined) => {
-    const data_ = records.map((r) => pick(r) ?? null);
-    if (data_.every((v) => v === null)) return;
-    out.push({
-      id,
-      recordType: "Measurement",
-      subject,
-      type,
-      unit,
-      sampleArray: { offsets, dataPoints: data_ },
-      startTime: start,
-      endTime: end,
-      provenance: prov("sensor"),
-    });
-    measuredBy.push({ type: "measuredBy", ref: id });
+    const data = pickSeries(records, pick);
+    if (data) pushStream(id, type, unit, data);
   };
   scalarStream("fit-hr", "heart_rate", "/min", (r) => r.heart_rate);
   scalarStream("fit-power", "power", "W", (r) => r.power);

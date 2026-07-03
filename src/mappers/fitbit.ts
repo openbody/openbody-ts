@@ -37,6 +37,7 @@
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { makeDisciplineMapper } from "./shared.js";
 
 export interface FitbitFile {
   name: string;
@@ -69,7 +70,8 @@ const DISC: Record<string, string> = {
   "rowing machine": "rowing",
   tennis: "tennis",
 };
-const disciplineFor = (name: string) => DISC[name.toLowerCase()] ?? `fitbit:${name.toLowerCase().replace(/\s+/g, "_")}`;
+const mapDiscipline = makeDisciplineMapper(DISC, "fitbit");
+const disciplineFor = (name: string) => mapDiscipline(name.toLowerCase(), name.toLowerCase().replace(/\s+/g, "_"));
 
 const DIST_UNIT: Record<string, string> = { Kilometer: "km", Mile: "[mi_i]", Meter: "m", Foot: "[ft_i]" };
 

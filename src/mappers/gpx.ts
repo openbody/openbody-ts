@@ -37,6 +37,7 @@
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { els, first, numText, text } from "./xml.js";
 
 const DISC: Record<string, string> = {
@@ -57,8 +58,9 @@ const DISC: Record<string, string> = {
   rowing: "rowing",
   row: "rowing",
 };
+const mapDiscipline = makeDisciplineMapper(DISC, "gpx");
 const disciplineFor = (t?: string): string | undefined =>
-  t ? (DISC[t.toLowerCase().replace(/\s+/g, "_")] ?? `gpx:${t.toLowerCase()}`) : undefined;
+  t ? mapDiscipline(t.toLowerCase().replace(/\s+/g, "_"), t.toLowerCase()) : undefined;
 
 interface Pt {
   lat: number;
@@ -150,21 +152,18 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   });
   measuredBy.push({ type: "measuredBy", ref: "gpx-route" });
 
+  const pushStream = makeScalarStream({
+    records,
+    measuredBy,
+    subject,
+    offsets,
+    startTime: start,
+    endTime: end,
+    provenance: prov,
+  });
   const scalarStream = (id: string, type: string, unit: string, pick: (p: Pt) => number | undefined) => {
-    const data = timed.map((p) => pick(p) ?? null);
-    if (data.every((v) => v === null)) return;
-    records.push({
-      id,
-      recordType: "Measurement",
-      subject,
-      type,
-      unit,
-      sampleArray: { offsets, dataPoints: data },
-      startTime: start,
-      endTime: end,
-      provenance: prov,
-    });
-    measuredBy.push({ type: "measuredBy", ref: id });
+    const data = pickSeries(timed, pick);
+    if (data) pushStream(id, type, unit, data);
   };
   scalarStream("gpx-hr", "heart_rate", "/min", (p) => p.hr);
   scalarStream("gpx-cadence", "cadence", "/min", (p) => p.cad);

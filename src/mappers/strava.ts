@@ -1,6 +1,7 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { iso, makeDisciplineMapper, makeScalarStream } from "./shared.js";
 
 export interface StravaInput {
   activity: Record<string, any>;
@@ -30,7 +31,8 @@ const DISC: Record<string, string> = {
   Pilates: "pilates",
   RockClimbing: "climbing",
 };
-const disciplineFor = (t: string): string => DISC[t] ?? `strava:${t.toLowerCase()}`;
+const mapDiscipline = makeDisciplineMapper(DISC, "strava");
+const disciplineFor = (t: string): string => mapDiscipline(t, t.toLowerCase());
 
 /** Map a Strava activity + streams object to OpenBody wire records. */
 export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -42,7 +44,7 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
       'mapStrava: streams.time.data is missing — fetch the activity streams with keys including "time" (sampleArray offsets cannot be computed without it)',
     );
   const start = a.start_date;
-  const end = new Date(new Date(start).getTime() + a.elapsed_time * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const end = iso(new Date(new Date(start).getTime() + a.elapsed_time * 1000));
   const offsets: number[] = s.time.data;
   // device_name is a free-form display string; Strava does not state the manufacturer
   // separately, so none is fabricated (model-only, same as tcx.ts's <Creator>).
@@ -52,20 +54,15 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
   const records: OpenBodyRecord[] = [];
   const measuredBy: { type: string; ref: string }[] = [];
 
-  const scalarStream = (id: string, type: string, unit: string, data: (number | null)[]) => {
-    records.push({
-      id,
-      recordType: "Measurement",
-      subject,
-      type,
-      unit,
-      sampleArray: { offsets, dataPoints: data },
-      startTime: start,
-      endTime: end,
-      provenance: prov("sensor"),
-    });
-    measuredBy.push({ type: "measuredBy", ref: id });
-  };
+  const scalarStream = makeScalarStream({
+    records,
+    measuredBy,
+    subject,
+    offsets,
+    startTime: start,
+    endTime: end,
+    provenance: prov("sensor"),
+  });
   if (s.heartrate) scalarStream(`strava-${a.id}-hr`, "heart_rate", "/min", s.heartrate.data);
   if (s.watts) scalarStream(`strava-${a.id}-power`, "power", "W", s.watts.data);
   if (s.cadence) scalarStream(`strava-${a.id}-cadence`, "cadence", "/min", s.cadence.data);

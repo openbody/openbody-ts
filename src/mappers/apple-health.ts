@@ -4,6 +4,7 @@
 // (<Record .../> / <Workout .../> are usually self-closing), parsed with the shared
 // regex-XML helpers (src/mappers/xml.ts — no DOM, zero deps).
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { makeDisciplineMapper } from "./shared.js";
 import { els } from "./xml.js";
 
 const rfc = (s: string) =>
@@ -22,7 +23,10 @@ const DISC: Record<string, string> = {
   HKWorkoutActivityTypeRunning: "running",
   HKWorkoutActivityTypeCycling: "cycling",
 };
-const typeFor = (hk: string, map: Record<string, string>) => map[hk] ?? `apple:${hk}`;
+// HK identifiers → registry tokens with an apple: namespaced fallback (§4.4 ladder);
+// the shared mechanism serves both the quantity-type and the workout-discipline map.
+const qtyFor = makeDisciplineMapper(QTY, "apple");
+const discFor = makeDisciplineMapper(DISC, "apple");
 
 /** Map an Apple Health export.xml string to OpenBody wire records. */
 export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -40,7 +44,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
         id,
         recordType: "Measurement",
         subject,
-        type: typeFor(a.type, QTY),
+        type: qtyFor(a.type),
         quantity: Number(a.value),
         unit: UNIT[a.unit ?? ""] ?? a.unit,
         startTime: rfc(a.startDate ?? ""),
@@ -87,7 +91,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
       id: `apple-workout-${i}`,
       recordType: "Session",
       subject,
-      disciplines: [typeFor(a.workoutActivityType ?? "", DISC)],
+      disciplines: [discFor(a.workoutActivityType ?? "")],
       intent: "train",
       startTime: start,
       endTime: end,
