@@ -32,6 +32,15 @@ describe("mapAppleHealth", () => {
     }
   });
 
+  // Reviewer C8: entity-encoded attribute values must decode ("Tom &amp; Jerry" ≠ literal).
+  it("decodes XML entities in attribute values (sourceName → provenance.device.model)", () => {
+    const out = mapAppleHealth(
+      `<HealthData><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Tom &amp; Jerry&#8217;s Watch"
+        unit="count/min" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 06:30:00 +0000" value="72"/></HealthData>`,
+    );
+    expect(out[0]?.provenance?.device?.model).toBe("Tom & Jerry’s Watch");
+  });
+
   describe("malformed input (behavior pinned)", () => {
     it("empty input maps to []", () => {
       expect(mapAppleHealth("")).toEqual([]);

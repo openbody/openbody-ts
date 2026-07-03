@@ -89,6 +89,16 @@ describe("mapTcx", () => {
     expect(mapTcx(coursesOnly)).toEqual([]);
   });
 
+  // Reviewer C8: entity-encoded source text must decode ("Tom &amp; Jerry" ≠ literal).
+  it("decodes XML entities in extracted text (Creator Name → provenance.device.model)", () => {
+    const out = mapTcx(
+      `<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>tom &amp; jerry &lt;run&gt;</Id>
+        <Creator><Name>Bob&#39;s &quot;Watch&quot;</Name></Creator></Activity></Activities></TrainingCenterDatabase>`,
+    );
+    expect(out[0]?.clientRecordId).toBe("tom & jerry <run>");
+    expect(out[0]?.provenance?.device?.model).toBe(`Bob's "Watch"`);
+  });
+
   describe("malformed input (behavior pinned)", () => {
     it("empty input maps to []", () => {
       expect(mapTcx("")).toEqual([]);

@@ -76,6 +76,17 @@ describe("mapGpx", () => {
     expect(mapGpx(readExample("gpx/gpx-waypoints-sample.gpx"))).toEqual([]);
   });
 
+  // Reviewer C8: regex-XML parsing must still decode the five XML entities (+ numeric
+  // character references) — a track named "Tom &amp; Jerry" must not stay encoded.
+  it("decodes XML entities in extracted text (track name → Session.name)", () => {
+    const xml = `<gpx creator="Caf&#233; &quot;Runner&quot;"><trk><name>Tom &amp; Jerry &lt;3 &#x1F44D;</name><type>running</type>
+      <trkseg><trkpt lat="1" lon="2"><time>2026-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`;
+    const out = mapGpx(xml);
+    const session = out.find((r) => r.recordType === "Session");
+    expect(session?.name).toBe("Tom & Jerry <3 \u{1F44D}");
+    expect(session?.extension?.gpx?.creator, "attribute values decode too").toBe('Café "Runner"');
+  });
+
   describe("malformed input (behavior pinned)", () => {
     it("empty input maps to []", () => {
       expect(mapGpx("")).toEqual([]);
