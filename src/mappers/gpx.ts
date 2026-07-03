@@ -36,7 +36,7 @@
 // - The <gpx creator="…"> attribute is free-form vendor text, not a registry token,
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { els, first, numText, text } from "./xml.js";
 
@@ -74,7 +74,7 @@ interface Pt {
 
 /** Map a GPX 1.1 (or 1.0) document string to OpenBody wire records (see file header for shape decisions). */
 export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
 
   const pts: Pt[] = [];
   let trkName: string | undefined, trkType: string | undefined;

@@ -1,14 +1,14 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
 /** Map a Hevy CSV export to OpenBody wire records (one Session per workout). */
 export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
 
   const sessions = new Map<string, Record<string, string>[]>();

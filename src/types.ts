@@ -6,6 +6,13 @@
 /** One OpenBody wire record (validate with `validate`, normalize with `normalizeDocument`). */
 export type OpenBodyRecord = Record<string, any>;
 
+/**
+ * The placeholder subject id every mapper stamps when `MapOptions.subject` is absent
+ * (Q5 groundwork: a later errors/warnings surface will warn when output falls back to
+ * this — callers should pass their own subject id).
+ */
+export const DEFAULT_SUBJECT = "subj-001";
+
 /** Options shared by every inbound mapper. */
 export interface MapOptions {
   subject?: string;

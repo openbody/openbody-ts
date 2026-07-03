@@ -3,7 +3,7 @@
 // parity); this mapper covers both shapes. Everything lives in element attributes
 // (<Record .../> / <Workout .../> are usually self-closing), parsed with the shared
 // regex-XML helpers (src/mappers/xml.ts — no DOM, zero deps).
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { makeDisciplineMapper } from "./shared.js";
 import { els } from "./xml.js";
 
@@ -30,7 +30,7 @@ const discFor = makeDisciplineMapper(DISC, "apple");
 
 /** Map an Apple Health export.xml string to OpenBody wire records. */
 export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const records: OpenBodyRecord[] = [];
   const hrRecords: { ref: string; s: number; e: number }[] = [];
   let i = 0;

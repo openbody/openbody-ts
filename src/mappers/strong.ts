@@ -1,12 +1,12 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
 export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const off = opts.utcOffset ?? "Z";
   // Delimiter sniffed from the header (Strong exports "," or ";" by locale); the shared
   // quoted-CSV parser handles commas/newlines inside quoted workout names and notes.

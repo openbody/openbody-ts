@@ -52,7 +52,7 @@
 //     ride), so it stays opaque-only. The raw Type string always rides in
 //     `exerciseRef.opaque` (§6.5 lossless floor).
 
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
@@ -127,7 +127,7 @@ function inferPiece(
 
 /** Map a Concept2 Logbook season CSV export to OpenBody wire records (one Session per row). */
 export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
   const records: OpenBodyRecord[] = [];
 

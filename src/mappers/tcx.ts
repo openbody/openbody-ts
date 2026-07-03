@@ -43,7 +43,7 @@
 //   workout shape; use mapFit for a decoded workout). A file containing only those
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { elRe, els, first, numText, text } from "./xml.js";
 
@@ -67,7 +67,7 @@ interface Tp {
 
 /** Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records (see file header for shape decisions). */
 export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const records: OpenBodyRecord[] = [];
   let n = 0;
 

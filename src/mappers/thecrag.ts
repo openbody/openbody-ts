@@ -54,7 +54,7 @@
 //   The raw gear style always rides in `exerciseRef.opaque` (§6.5 lossless floor);
 //   `Ascent Gear Style` (as climbed) wins over `Route Gear Style`.
 
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { parseCsv, toRfc3339 } from "./csv.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
@@ -113,7 +113,7 @@ function outcomeFor(ascentType: string): OpenBodyRecord | undefined {
 
 /** Map a theCrag logbook CSV export to OpenBody wire records (one Session per date+crag). */
 export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
 
   // Group ascents into Sessions by calendar date + crag (a theCrag logbook has no session

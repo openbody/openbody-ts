@@ -16,7 +16,7 @@
 // with a decoder of their choice (e.g. `fit-file-parser`, MIT) and hands over the resulting
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 
 interface DecodedRecord {
@@ -283,6 +283,6 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
 
 /** Map a decoded FIT activity or workout file to OpenBody wire records (see file header for the decode-input contract). */
 export function mapFit(input: FitInput, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   return input.workouts?.length ? mapWorkout(input, subject) : mapActivity(input, subject);
 }

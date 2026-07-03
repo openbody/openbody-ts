@@ -36,7 +36,7 @@
 // UTC (mapped with "Z"); everything else is local wall-clock time — pass opts.utcOffset
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { makeDisciplineMapper } from "./shared.js";
 
 export interface FitbitFile {
@@ -118,7 +118,7 @@ const basename = (name: string) => name.split("/").pop() ?? name;
 
 /** Map any subset of a Google Takeout Fitbit folder ({ name, text } JSON files) to OpenBody wire records. */
 export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const off = opts.utcOffset ?? "Z";
   const records: OpenBodyRecord[] = [];
   const prov = (method: string) => ({ method, sourceApp: "fitbit" });

@@ -1,6 +1,6 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream } from "./shared.js";
 
 export interface StravaInput {
@@ -36,7 +36,7 @@ const disciplineFor = (t: string): string => mapDiscipline(t, t.toLowerCase());
 
 /** Map a Strava activity + streams object to OpenBody wire records. */
 export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRecord[] {
-  const subject = opts.subject ?? "subj-001";
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
   const a = input.activity,
     s = input.streams;
   if (!Array.isArray(s?.time?.data))
