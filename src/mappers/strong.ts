@@ -1,15 +1,15 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
-import { num, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { parseCsv, num, toRfc3339, contentHash, type OpenBodyRecord, type MapOptions } from "./csv.js";
 import { resolveExerciseRef } from "../resolve.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
 export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const subject = opts.subject ?? "subj-001";
-  const text = csv.trim();
-  const delim = text.split("\n")[0].includes(";") ? ";" : ",";
-  const [head, ...lines] = text.split("\n");
-  const cols = head.split(delim);
-  const rows = lines.map((l) => Object.fromEntries(l.split(delim).map((c, i) => [cols[i], c])) as Record<string, string>);
+  const off = opts.utcOffset ?? "Z";
+  // Delimiter sniffed from the header (Strong exports "," or ";" by locale); the shared
+  // quoted-CSV parser handles commas/newlines inside quoted workout names and notes.
+  const delim = csv.trimStart().split("\n")[0].includes(";") ? ";" : ",";
+  const rows = parseCsv(csv, delim);
 
   const byWorkout = new Map<string, Record<string, string>[]>();
   for (const r of rows) {
@@ -18,14 +18,18 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
   }
 
   const records: OpenBodyRecord[] = [];
-  let wIdx = 0;
-  for (const [, wrows] of byWorkout) {
-    wIdx++;
+  for (const [key, wrows] of byWorkout) {
     const f = wrows[0];
-    const start = new Date(f.Date.replace(" ", "T") + "Z").toISOString().replace(/\.\d{3}Z$/, "Z");
-    const end = new Date(new Date(start).getTime() + Number(f.Duration || 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const start = toRfc3339(f.Date, off);
+    // Wall-clock + Duration arithmetic on a fixed UTC anchor (a constant offset cancels in
+    // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
+    const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
+    const end = new Date(Date.parse(wall + "Z") + Number(f.Duration || 0) * 1000).toISOString().slice(0, 19) + off;
     const session: OpenBodyRecord = {
-      id: `strong-w${wIdx}`, recordType: "Session", subject,
+      // The export has no workout id of its own, so the natural key (Date|Workout Name) is
+      // the client identifier (§7.1) and a hash of it the stable id — positional numbering
+      // would renumber everything when one more workout is exported, defeating dedup.
+      id: `strong-w-${contentHash(key)}`, recordType: "Session", subject, clientRecordId: key,
       disciplines: ["strength"], startTime: start, endTime: end,
       name: f["Workout Name"],
       extension: { "io.strong.export": { workoutNo: f["Workout No"] } },

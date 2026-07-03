@@ -66,6 +66,10 @@ for (const [name, records] of [["concept2", c2], ["thecrag", crag]] as const) {
   const hr = c2.find((r) => r.recordType === "Measurement" && r.id === `${twoK?.id}-hr`);
   if (hr?.type !== "heart_rate_mean" || hr?.quantity !== 172 || hr?.unit !== "/min") errs.push(`2000m: HR measurement ${JSON.stringify(hr)}`);
   if (!twoK?.links?.some((l: any) => l.type === "measuredBy" && l.ref === hr?.id)) errs.push("2000m: Session missing measuredBy link to the HR measurement");
+  // The Date column is offset-less wall-clock time — the mapped instant (and the HR
+  // measurement window) must be the same on every host TZ (parsed manually, stamped "Z").
+  if (twoK?.startTime !== "2026-03-02T06:45:00Z" || twoK?.endTime !== "2026-03-02T06:52:45Z") errs.push(`2000m: window ${twoK?.startTime}..${twoK?.endTime}, want 06:45:00Z..06:52:45Z regardless of host TZ`);
+  if (hr?.startTime !== "2026-03-02T06:45:00Z") errs.push(`2000m: HR window startTime ${hr?.startTime} not TZ-independent`);
 
   // Fixed-time piece on the SkiErg: time-scored; skierg discipline namespaced; ski.erg id.
   const thirty = sess("30:00 SkiErg");
@@ -170,6 +174,7 @@ for (const [name, records] of [["concept2", c2], ["thecrag", crag]] as const) {
     errs.push(`Wheel of Life: modifiers ${JSON.stringify(wheel?.performance?.modifiers)} (Ascent Grade must win over Route Grade)`);
   if (!byRoute("Kachoong")?.notes?.includes("Finally!")) errs.push("Kachoong: comment not carried into notes");
   const day1 = crag.find((s) => s.name === "Arapiles"), day2 = crag.find((s) => s.name === "Hollow Mountain Cave");
+  if (day1?.startTime !== "2026-05-16T00:00:00Z") errs.push(`Arapiles startTime ${day1?.startTime} — an offset-carrying Ascent Date must pass through untouched by the host TZ`);
   if (JSON.stringify(day1?.disciplines) !== '["climbing"]') errs.push(`Arapiles disciplines: ${JSON.stringify(day1?.disciplines)}`);
   if (JSON.stringify(day2?.disciplines) !== '["bouldering"]') errs.push(`boulder-day disciplines: ${JSON.stringify(day2?.disciplines)}`);
   if (day1?.workUnits?.length !== 6 || day2?.workUnits?.length !== 4) errs.push(`grouping: ${day1?.workUnits?.length}+${day2?.workUnits?.length} ascents, want 6+4`);

@@ -1,5 +1,5 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
-import { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { parseCsv, num, toRfc3339, contentHash, type OpenBodyRecord, type MapOptions } from "./csv.js";
 import { resolveExerciseRef } from "../resolve.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
@@ -16,16 +16,17 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
   }
 
   const records: OpenBodyRecord[] = [];
-  let sIdx = 0;
-  for (const [, srows] of sessions) {
-    sIdx++;
+  for (const [key, srows] of sessions) {
     const f = srows[0];
     const hasSuperset = srows.some((r) => r.superset_id !== "");
     const session: OpenBodyRecord = {
-      id: `hevy-sess-${sIdx}`, recordType: "Session", subject,
+      // The export has no workout id of its own, so the natural key (title|start_time) is
+      // the client identifier (§7.1) and a hash of it the stable id — positional numbering
+      // would renumber everything when one more workout is exported, defeating dedup.
+      id: `hevy-sess-${contentHash(key)}`, recordType: "Session", subject, clientRecordId: key,
       name: f.title,
       ...(f.description ? { notes: f.description } : {}),
-      disciplines: ["strength"], startTime: toRfc3339(f.start_time), endTime: toRfc3339(f.end_time),
+      disciplines: ["strength"], startTime: toRfc3339(f.start_time, opts.utcOffset), endTime: toRfc3339(f.end_time, opts.utcOffset),
     };
     const exGroups: { title: string; superset: string; sets: Record<string, string>[] }[] = [];
     for (const r of srows) {

@@ -135,7 +135,9 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[]
       return wu;
     });
 
-    const startTime = f["Ascent Date"] ? toRfc3339(f["Ascent Date"]) : undefined;
+    // Ascent Date is usually already RFC 3339 (passes through); date-only/wall-clock forms
+    // get opts.utcOffset stamped rather than the host TZ's interpretation.
+    const startTime = f["Ascent Date"] ? toRfc3339(f["Ascent Date"], opts.utcOffset) : undefined;
     records.push({
       id: sid, recordType: "Session", subject,
       ...(f["Crag Name"] ? { name: f["Crag Name"] } : {}),

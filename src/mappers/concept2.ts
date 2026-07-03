@@ -131,9 +131,13 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     const totalCal = num(r["Total Cal"]);
     const piece = inferPiece(r["Description"] ?? "", workSec, workDist, restSec);
 
-    const start = toRfc3339(r["Date"]);
+    const start = toRfc3339(r["Date"], opts.utcOffset); // Date is offset-less local wall-clock
     const elapsed = (workSec ?? 0) + (restSec ?? 0);
-    const end = new Date(new Date(start).getTime() + Math.round(elapsed) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    // Wall-clock + elapsed arithmetic on a fixed UTC anchor (a constant offset cancels in
+    // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
+    const off = opts.utcOffset ?? "Z";
+    const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
+    const end = new Date(Date.parse(wall + "Z") + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
     const prov = { method: "sensor", sourceApp: "concept2", ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}) };
 
     // Whole-workout achieved intensity (§5.13) — only honest on a single piece (see header).
