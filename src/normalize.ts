@@ -4,7 +4,10 @@
 // implement this.
 // Reduces a document (a record or array of records) to a sorted set of canonical
 // record byte strings. Two documents are equivalent iff these sets are equal.
+// Error contract (src/errors.ts): structurally malformed records (invalid
+// roundScheme/sets combinations, non-numeric fixed-point parts) throw NormalizeError.
 import { canonicalString, deepCanon, isFixedPointLike, type Json } from "./canonical.js";
+import { NormalizeError } from "./errors.js";
 import { LosslessNumber } from "./parse.js";
 // Inline container fields by recordType (§5.1) — shared with validate.ts, see src/records.ts.
 import { CONTAINERS } from "./records.js";
@@ -178,8 +181,10 @@ function expandRoundScheme(block: Rec): void {
   const rs = block.roundScheme;
   if (rs === undefined) return;
   const where = block.id ?? "?";
-  if (block.repetitions !== undefined) throw new Error(`Block ${where}: roundScheme+repetitions is invalid (§5.4)`);
-  if (block.performance !== undefined) throw new Error(`Block ${where}: roundScheme+performance is invalid (§5.4)`);
+  if (block.repetitions !== undefined)
+    throw new NormalizeError(`Block ${where}: roundScheme+repetitions is invalid (§5.4)`);
+  if (block.performance !== undefined)
+    throw new NormalizeError(`Block ${where}: roundScheme+performance is invalid (§5.4)`);
   const src: Rec[] = Array.isArray(block.children) ? block.children : [];
   const out: Rec[] = [];
   rs.forEach((v: unknown, r: number) => {
@@ -203,7 +208,7 @@ function expandSets(arr: Rec[]): Rec[] {
     const n = raw instanceof LosslessNumber ? Number(raw.value) : typeof raw === "number" ? raw : undefined;
     if (n && n >= 1) {
       if (item.performance !== undefined)
-        throw new Error(`WorkUnit ${item.id ?? "?"}: sets+performance is invalid (§5.5)`);
+        throw new NormalizeError(`WorkUnit ${item.id ?? "?"}: sets+performance is invalid (§5.5)`);
       const first = clone(item);
       delete first.prescription.sets;
       out.push(first);

@@ -11,6 +11,10 @@
 // produced as ordinary JS values. Feed the result to `normalizeDocument` /
 // `equivalent`; schema validation (`validate`) runs on a plain `JSON.parse`, where
 // float64 is harmless because it only checks types and ranges.
+//
+// Error contract (src/errors.ts): malformed JSON throws ParseError (code "parse"),
+// carrying the failure's character offset.
+import { ParseError } from "./errors.js";
 
 /** A JSON number preserved as its exact decimal source text. */
 export class LosslessNumber {
@@ -30,7 +34,7 @@ export function parseLossless(text: string): unknown {
   const n = text.length;
 
   const fail = (msg: string): never => {
-    throw new SyntaxError(`parseLossless: ${msg} at offset ${i}`);
+    throw new ParseError(`parseLossless: ${msg} at offset ${i}`, i);
   };
 
   const skipWs = () => {

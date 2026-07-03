@@ -2,6 +2,7 @@
 // parser preserves exact decimal text where JSON.parse (float64) loses it — plus the
 // JSON grammar acceptance/rejection surface.
 import { describe, expect, it } from "vitest";
+import { ParseError } from "../src/errors.js";
 import { LosslessNumber, parseLossless } from "../src/parse.js";
 import type { WireRecord } from "../src/types.js";
 
@@ -96,6 +97,6 @@ describe("parseLossless rejects malformed JSON", () => {
     ["tru", "bad literal"],
   ] as const;
   it.each(bad)("rejects %j (%s)", (text) => {
-    expect(() => parseLossless(text)).toThrow(SyntaxError);
+    expect(() => parseLossless(text)).toThrow(ParseError);
   });
 });

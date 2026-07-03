@@ -1,5 +1,9 @@
 // Canonicalization primitives for the OpenBody normalized-equivalence method (conformance/EQUIVALENCE.md; SPEC §8.3 points there).
+// Error contract (src/errors.ts): a fixed-point object with a non-numeric
+// coefficient/exponent throws NormalizeError (naming the offending value), never a
+// raw BigInt SyntaxError from deep inside.
 import canonicalizeMod from "canonicalize";
+import { NormalizeError } from "./errors.js";
 import { LosslessNumber } from "./parse.js";
 
 // canonicalize is CJS (module.exports = fn); cast fixes NodeNext default-import types.
@@ -31,8 +35,15 @@ export function canonNumber(n: number | LosslessNumber | { coefficient: unknown;
   } else if (typeof n === "number") {
     [coeff, exp] = decimalParts(n.toString());
   } else {
-    coeff = BigInt(String(n.coefficient).trim());
+    const rawCoeff = String(n.coefficient).trim();
+    try {
+      coeff = BigInt(rawCoeff);
+    } catch {
+      throw new NormalizeError(`fixed-point coefficient is not an integer: ${JSON.stringify(n.coefficient)}`);
+    }
     exp = Number(String(n.exponent).trim());
+    if (!Number.isInteger(exp))
+      throw new NormalizeError(`fixed-point exponent is not an integer: ${JSON.stringify(n.exponent)}`);
   }
   if (coeff === 0n) return { coefficient: "0", exponent: "0" };
   const negative = coeff < 0n;
@@ -165,6 +176,6 @@ function orderSetArrays(value: Json): Json {
 export function canonicalString(record: Json): string {
   const ordered = orderSetArrays(record);
   const s = canonicalize(ordered);
-  if (s === undefined) throw new Error("canonicalize failed");
+  if (s === undefined) throw new NormalizeError("canonicalize failed");
   return s;
 }

@@ -11,8 +11,9 @@
 // narrowing them to the canon vocab would reject conforming documents. Closed spec
 // enums (intent, status, scoring, provenance.method, …) are literal unions.
 //
-// This file is also the public mapper contract (MapOptions / DEFAULT_SUBJECT below):
-// every mapper takes a MapOptions and returns LiveRecord[], whatever its input.
+// This file is also the public mapper contract (MapOptions / MapperResult /
+// DEFAULT_SUBJECT below): every inbound mapper takes a MapOptions and returns a
+// MapperResult ({ records, warnings }), whatever its input.
 
 // ---- scalars (§4.2) -----------------------------------------------------------------------
 
@@ -567,9 +568,9 @@ export type WireRecord = Record<string, any>;
 // ---- mapper contract --------------------------------------------------------------------------
 
 /**
- * The placeholder subject id every mapper stamps when `MapOptions.subject` is absent
- * (Q5 groundwork: a later errors/warnings surface will warn when output falls back to
- * this — callers should pass their own subject id).
+ * The placeholder subject id every mapper stamps when `MapOptions.subject` is absent.
+ * The fallback is reported on the warnings channel (`MapWarning` code
+ * "default-subject") — callers should pass their own subject id.
  */
 export const DEFAULT_SUBJECT = "subj-001";
 
@@ -578,4 +579,27 @@ export interface MapOptions {
   subject?: string;
   /** RFC 3339 offset (e.g. "-07:00") stamped onto the source's offset-less local wall-clock timestamps. Default "Z". */
   utcOffset?: string;
+}
+
+/**
+ * One thing an inbound mapper degraded, skipped, or defaulted while mapping — the
+ * warnings channel (WP7). Structurally unusable input throws `MapperInputError`
+ * instead (src/errors.ts states the full per-layer policy); warnings cover input the
+ * mapper handled but not silently-losslessly: skipped files/rows/entries, residue
+ * routed to `extension`, fabricated defaults (e.g. "default-subject").
+ */
+export interface MapWarning {
+  /** Stable machine-readable warning token (kebab-case, e.g. "default-subject", "skipped-file"). */
+  code: string;
+  /** Human-readable explanation, suitable for surfacing to end users. */
+  message: string;
+  /** Optional machine-usable context (file name, row index, dropped count, …). */
+  context?: Record<string, unknown>;
+}
+
+/** What every inbound mapper returns: the mapped wire records plus the warnings channel. */
+export interface MapperResult {
+  records: LiveRecord[];
+  /** Everything degraded/skipped/defaulted during the mapping — empty when the mapping was clean. */
+  warnings: MapWarning[];
 }

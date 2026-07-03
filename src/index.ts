@@ -4,6 +4,9 @@ export type { FixedPoint, Json } from "./canonical.js";
 // deliberately NOT re-exported here so importing this package's main entry point
 // stays safe in a browser bundle (no node:fs/node:path/node:url in the module graph).
 export { canonicalString, canonNumber, canonTimestamp, deepCanon } from "./canonical.js";
+// The typed error hierarchy + the per-layer error policy (WP7) — see src/errors.ts's
+// header for the full contract (validate reports, parse/normalize/mappers throw typed).
+export { MapperInputError, NormalizeError, OpenBodyError, ParseError } from "./errors.js";
 export type {
   FitbitFile,
   FitbitMapOptions,
@@ -56,6 +59,8 @@ export type {
   LiveRecord,
   Load,
   MapOptions,
+  MapperResult,
+  MapWarning,
   Measurement,
   MediaItem,
   Modifier,
