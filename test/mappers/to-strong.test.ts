@@ -34,11 +34,11 @@ describe("mapOpenBodyToStrong", () => {
   // Outbound round-trip: mapOpenBodyToStrong is the mirror of mapStrong. It covers the
   // full fixture — including the Plank duration-scored row — with zero omissions.
   it("round-trips the Strong fixture (Strong → OpenBody → Strong → OpenBody) with 0 omissions", () => {
-    const original = mapStrong(readExample("strong/strong-sample.csv"));
+    const original = mapStrong(readExample("strong/strong-sample.csv")).records;
     expect(original.length, "fixture mapped 0 records").toBeGreaterThan(0);
     const out = mapOpenBodyToStrong(original);
     expect(out.omissions, "expected 0 omissions for the Strong fixture").toEqual([]);
-    const roundTripped = mapStrong(out.csv);
+    const roundTripped = mapStrong(out.csv).records;
     expectAllValid(roundTripped);
     expect(
       equivalent(original, roundTripped),
@@ -87,7 +87,8 @@ describe("mapOpenBodyToStrong", () => {
       expect(dist.rows[0]?.Distance, "no float dust").toBe("5300");
       expect(dist.omissions).toEqual([]);
       // round-trips through mapStrong as { value: 5300, unit: "m" }
-      const distBack = ofKind(mapStrong(dist.csv), "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.distance;
+      const distBack = ofKind(mapStrong(dist.csv).records, "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance
+        ?.distance;
       expect(distBack).toEqual({ absolute: { value: 5300, unit: "m" } });
     });
 
@@ -101,7 +102,7 @@ describe("mapOpenBodyToStrong", () => {
       expect(bw.rows[0]?.Weight).toBe("0");
       expect(bw.omissions).toEqual([]);
       expect(
-        ofKind(mapStrong(bw.csv), "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.load,
+        ofKind(mapStrong(bw.csv).records, "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.load,
         "re-import grew a load",
       ).toBeUndefined();
     });
@@ -230,7 +231,7 @@ describe("mapOpenBodyToStrong", () => {
   // Crossing apps preserves names: Hevy → OpenBody → Strong CSV re-emits Hevy's own
   // exercise strings byte-for-byte (to-strong.ts prefers `opaque`).
   it("re-emits Hevy's original exercise names byte-for-byte", () => {
-    const hevyRecords = mapHevy(readExample("hevy/hevy-sample.csv"));
+    const hevyRecords = mapHevy(readExample("hevy/hevy-sample.csv")).records;
     const outCsv = mapOpenBodyToStrong(hevyRecords).csv;
     const outNames = new Set(parseCsv(outCsv).map((r) => r["Exercise Name"]));
     for (const orig of [

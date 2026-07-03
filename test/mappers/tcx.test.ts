@@ -2,12 +2,13 @@
 // aggregates with derivedFrom links, and the Activities-less degenerate case.
 // Ported from scripts/test-tcx-gpx.ts.
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapTcx } from "../../src/mappers/tcx.js";
 import { expectAllValid, expectRoundTripStable, ofKind, readExample } from "../helpers.js";
 
 describe("mapTcx", () => {
   describe("one Running activity, 2 laps, streams + lap aggregates", () => {
-    const tcx = mapTcx(readExample("tcx/tcx-sample.tcx"));
+    const tcx = mapTcx(readExample("tcx/tcx-sample.tcx")).records;
 
     it("every record validates + normalization round-trips", () => {
       expectAllValid(tcx);
@@ -75,7 +76,7 @@ describe("mapTcx", () => {
     });
   });
 
-  it("Courses-only file maps to [] gracefully (Courses/Workouts documented unsupported)", () => {
+  it("Courses-only file maps to an empty result + a no-mappable-content warning", () => {
     const coursesOnly = `<?xml version="1.0"?>
       <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
         <Courses><Course><Name>Loop</Name>
@@ -86,7 +87,9 @@ describe("mapTcx", () => {
           </Lap>
         </Course></Courses>
       </TrainingCenterDatabase>`;
-    expect(mapTcx(coursesOnly)).toEqual([]);
+    const out = mapTcx(coursesOnly);
+    expect(out.records).toEqual([]);
+    expect(out.warnings.some((w) => w.code === "no-mappable-content")).toBe(true);
   });
 
   // Reviewer C8: entity-encoded source text must decode ("Tom &amp; Jerry" ≠ literal).
@@ -94,22 +97,39 @@ describe("mapTcx", () => {
     const out = mapTcx(
       `<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>tom &amp; jerry &lt;run&gt;</Id>
         <Creator><Name>Bob&#39;s &quot;Watch&quot;</Name></Creator></Activity></Activities></TrainingCenterDatabase>`,
-    );
+    ).records;
     expect(out[0]?.clientRecordId).toBe("tom & jerry <run>");
     expect(out[0]?.provenance?.device?.model).toBe(`Bob's "Watch"`);
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input maps to []", () => {
-      expect(mapTcx("")).toEqual([]);
+  describe("errors + warnings (WP7 contract)", () => {
+    it("input without a <TrainingCenterDatabase> root throws MapperInputError", () => {
+      expect(() => mapTcx("")).toThrow(MapperInputError);
+      expect(() => mapTcx("not xml at all")).toThrow(/TrainingCenterDatabase/);
     });
     it("an Activity with no laps/trackpoints still emits an undated Session", () => {
       const out = mapTcx(
         '<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>run-1</Id></Activity></Activities></TrainingCenterDatabase>',
-      );
+      ).records;
       expect(out).toHaveLength(1);
       expect(out[0]?.recordType).toBe("Session");
       expect(out[0]?.clientRecordId).toBe("run-1");
+    });
+    it("untimed trackpoints are dropped with a warning", () => {
+      const out = mapTcx(
+        `<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>run-1</Id>
+          <Lap StartTime="2026-01-01T00:00:00Z"><TotalTimeSeconds>10</TotalTimeSeconds><Track>
+            <Trackpoint><Time>2026-01-01T00:00:00Z</Time><HeartRateBpm><Value>120</Value></HeartRateBpm></Trackpoint>
+            <Trackpoint><HeartRateBpm><Value>121</Value></HeartRateBpm></Trackpoint>
+          </Track></Lap></Activity></Activities></TrainingCenterDatabase>`,
+      );
+      const w = out.warnings.find((x) => x.code === "dropped-untimed-points");
+      expect(w?.context).toEqual({ activity: "tcx-1", dropped: 1, total: 2 });
+    });
+    it("warns default-subject only when opts.subject is absent", () => {
+      const fixture = readExample("tcx/tcx-sample.tcx");
+      expect(mapTcx(fixture).warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapTcx(fixture, { subject: "me" }).warnings).toEqual([]);
     });
   });
 });

@@ -54,16 +54,18 @@
 //   The raw gear style always rides in `exerciseRef.opaque` (§6.5 lossless floor);
 //   `Ascent Gear Style` (as climbed) wins over `Route Gear Style`.
 
-import {
-  DEFAULT_SUBJECT,
-  type ExerciseRefObject,
-  type LiveRecord,
-  type MapOptions,
-  type Outcome,
-  type Performance,
-  type WorkUnit,
+import type {
+  ExerciseRefObject,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Outcome,
+  Performance,
+  WorkUnit,
 } from "../types.js";
-import { parseCsv, toRfc3339 } from "./csv.js";
+import { parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { subjectFor } from "./shared.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
 const CLEAN = new Set([
@@ -125,9 +127,13 @@ function outcomeFor(ascentType: string): Outcome | undefined {
 }
 
 /** Map a theCrag logbook CSV export to OpenBody wire records (one Session per date+crag). */
-export function mapTheCrag(csv: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const rows = parseCsv(csv);
+export function mapTheCrag(csv: string, opts: MapOptions = {}): MapperResult {
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "thecrag");
+  const { header, rows } = parseCsvDoc(csv);
+  // Structural minimum (WP7): the ascent-encoding columns. Date columns are NOT
+  // required — a dateless logbook degrades to undated sessions, it doesn't throw.
+  requireColumns("thecrag", header, ["Route Name", "Ascent Type"]);
 
   // Group ascents into Sessions by calendar date + crag (a theCrag logbook has no session
   // concept of its own — a day at one crag is the natural training occurrence).
@@ -200,5 +206,5 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): LiveRecord[] {
       workUnits,
     });
   }
-  return records;
+  return { records, warnings };
 }

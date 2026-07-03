@@ -1,7 +1,14 @@
 // Internal mapper plumbing (quoted-CSV parsing, number/timestamp helpers, content
 // hashing) shared by the CSV-based mappers. Deliberately NOT re-exported from the
 // package entry (src/index.ts) — these are implementation details, not public API.
+import { MapperInputError } from "../errors.js";
+
 export function parseCsv(text: string, delim = ","): Record<string, string>[] {
+  return parseCsvDoc(text, delim).rows;
+}
+
+/** parseCsv, but keeping the header row — so mappers can check required columns (WP7). */
+export function parseCsvDoc(text: string, delim = ","): { header: string[]; rows: Record<string, string>[] } {
   const rows: string[][] = [];
   let row: string[] = [],
     cell = "",
@@ -34,7 +41,25 @@ export function parseCsv(text: string, delim = ","): Record<string, string>[] {
     rows.push(row);
   }
   const header = rows.shift() ?? [];
-  return rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])));
+  return { header, rows: rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""]))) };
+}
+
+/**
+ * The WP7 structural-minimum check for the CSV mappers: the header must carry every
+ * column the mapping cannot proceed without, else the input is not a recognizable
+ * export of that app and the mapper throws MapperInputError. (An empty string has no
+ * header at all, so it fails too; a header-only export maps to an empty result.)
+ */
+export function requireColumns(mapper: string, header: string[], required: string[]): void {
+  const have = new Set(header);
+  const missing = required.filter((c) => !have.has(c));
+  if (missing.length) {
+    throw new MapperInputError(
+      mapper,
+      `input does not look like a ${mapper} CSV export — missing required column(s): ${missing.join(", ")}`,
+      `missing-columns:${missing.join(",")}`,
+    );
+  }
 }
 
 export const num = (s: string | undefined): number | undefined => {

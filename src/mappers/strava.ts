@@ -1,14 +1,8 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
-import {
-  DEFAULT_SUBJECT,
-  type Link,
-  type LiveRecord,
-  type MapOptions,
-  type Provenance,
-  type WireRecord,
-} from "../types.js";
-import { iso, makeDisciplineMapper, makeScalarStream } from "./shared.js";
+import { MapperInputError } from "../errors.js";
+import type { Link, LiveRecord, MapOptions, MapperResult, MapWarning, Provenance, WireRecord } from "../types.js";
+import { iso, makeDisciplineMapper, makeScalarStream, subjectFor } from "./shared.js";
 
 /** The documented Strava API activity+streams wire shape (input side — WireRecord-loose, not OpenBody records). */
 export interface StravaInput {
@@ -43,13 +37,29 @@ const mapDiscipline = makeDisciplineMapper(DISC, "strava");
 const disciplineFor = (t: string): string => mapDiscipline(t, t.toLowerCase());
 
 /** Map a Strava activity + streams object to OpenBody wire records. */
-export function mapStrava(input: StravaInput, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const a = input.activity,
-    s = input.streams;
+export function mapStrava(input: StravaInput, opts: MapOptions = {}): MapperResult {
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "strava");
+  const a = input?.activity,
+    s = input?.streams;
+  // Structural minimum (WP7): the activity's identity/timing fields and the time
+  // stream — nothing downstream is computable without them.
+  if (!a || typeof a !== "object")
+    throw new MapperInputError("strava", "input.activity is missing — pass the Strava API activity object");
   if (!Array.isArray(s?.time?.data))
-    throw new Error(
-      'mapStrava: streams.time.data is missing — fetch the activity streams with keys including "time" (sampleArray offsets cannot be computed without it)',
+    throw new MapperInputError(
+      "strava",
+      'streams.time.data is missing — fetch the activity streams with keys including "time" (sampleArray offsets cannot be computed without it)',
+    );
+  if (typeof a.start_date !== "string" || Number.isNaN(Date.parse(a.start_date)))
+    throw new MapperInputError(
+      "strava",
+      `activity.start_date is missing or not a parseable timestamp (got ${JSON.stringify(a.start_date)})`,
+    );
+  if (typeof a.elapsed_time !== "number")
+    throw new MapperInputError(
+      "strava",
+      `activity.elapsed_time is missing or not a number (got ${JSON.stringify(a.elapsed_time)})`,
     );
   const start = a.start_date;
   const end = iso(new Date(new Date(start).getTime() + a.elapsed_time * 1000));
@@ -152,5 +162,5 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): LiveRecord
       },
     ],
   });
-  return records;
+  return { records, warnings };
 }

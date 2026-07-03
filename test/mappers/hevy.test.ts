@@ -2,6 +2,7 @@
 // timestamps + content-derived stable ids (§7.1), and §6.5 resolver wiring.
 // Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapHevy } from "../../src/mappers/index.js";
 import { expectValidAndStable, ofKind, readExample, refObj } from "../helpers.js";
 
@@ -9,17 +10,17 @@ const hevyCsv = readExample("hevy/hevy-sample.csv");
 
 describe("mapHevy", () => {
   it("maps the sample export to valid, round-trip-stable wire records", () => {
-    expectValidAndStable(mapHevy(hevyCsv));
+    expectValidAndStable(mapHevy(hevyCsv).records);
   });
 
   // Offset-less CSV wall-clock timestamps must map to the SAME UTC instant on every
   // host TZ (run the suite under different TZ= values to prove it); opts.utcOffset
   // stamps local sources.
   it("maps wall-clock timestamps timezone-independently", () => {
-    const hevy = ofKind(mapHevy(hevyCsv), "Session");
+    const hevy = ofKind(mapHevy(hevyCsv).records, "Session");
     expect(hevy[0]?.startTime, "want 2025-12-22T08:00:00Z regardless of host TZ").toBe("2025-12-22T08:00:00Z");
     expect(
-      ofKind(mapHevy(hevyCsv, { utcOffset: "-08:00" }), "Session")[0]?.startTime,
+      ofKind(mapHevy(hevyCsv, { utcOffset: "-08:00" }).records, "Session")[0]?.startTime,
       "opts.utcOffset not stamped onto the wall-clock time",
     ).toBe("2025-12-22T08:00:00-08:00");
   });
@@ -27,7 +28,7 @@ describe("mapHevy", () => {
   // Session ids are content-derived — exporting one more workout must not renumber
   // the ones already synced (§7.1 dedup).
   it("derives stable content-hashed ids + clientRecordId", () => {
-    const hevy = mapHevy(hevyCsv);
+    const hevy = mapHevy(hevyCsv).records;
     expect(hevy[0]?.id).toMatch(/^hevy-sess-[0-9a-f]{8}$/);
     expect(hevy[0]?.clientRecordId).toBeTruthy();
   });
@@ -36,7 +37,7 @@ describe("mapHevy", () => {
   // a canonical `id` PLUS the lossless original in `opaque`; curated-null names stay
   // opaque-only.
   it("resolves exercise names through the §6.5 ladder (id + lossless opaque)", () => {
-    const refs = ofKind(mapHevy(hevyCsv), "Session")
+    const refs = ofKind(mapHevy(hevyCsv).records, "Session")
       .flatMap((s) => [
         ...(s.exercises ?? []),
         ...ofKind(
@@ -61,17 +62,23 @@ describe("mapHevy", () => {
     }
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input maps to []", () => {
-      expect(mapHevy("")).toEqual([]);
+  describe("errors + warnings (WP7 contract)", () => {
+    it("empty input throws MapperInputError (no header — not a Hevy export)", () => {
+      expect(() => mapHevy("")).toThrow(MapperInputError);
     });
-    it("header-only CSV maps to []", () => {
-      expect(mapHevy("title,start_time,end_time,exercise_title,superset_id,set_type,reps\n")).toEqual([]);
+    it("header-only CSV maps to an empty result (empty-but-valid export)", () => {
+      const out = mapHevy("title,start_time,end_time,exercise_title,superset_id,set_type,reps\n");
+      expect(out.records).toEqual([]);
     });
-    it("rows missing the expected columns do not throw (garbage in, one garbage session out)", () => {
-      const out = mapHevy("a,b\n1,2");
-      expect(out).toHaveLength(1);
-      expect(ofKind(out, "Session")[0]?.name).toBeUndefined(); // no title column
+    // WP7: garbage-in-garbage-out is gone — a header without the session-key columns is
+    // structurally unusable and throws instead of emitting a fabricated session.
+    it("a header missing the expected columns throws MapperInputError naming them", () => {
+      expect(() => mapHevy("a,b\n1,2")).toThrow(MapperInputError);
+      expect(() => mapHevy("a,b\n1,2")).toThrow(/title, start_time, exercise_title/);
+    });
+    it("warns default-subject only when opts.subject is absent", () => {
+      expect(mapHevy(hevyCsv).warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapHevy(hevyCsv, { subject: "me" }).warnings).toEqual([]);
     });
   });
 });

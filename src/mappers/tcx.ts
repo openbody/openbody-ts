@@ -43,16 +43,18 @@
 //   workout shape; use mapFit for a decoded workout). A file containing only those
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
-import {
-  DEFAULT_SUBJECT,
-  type Link,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Provenance,
-  type WorkUnit,
+import { MapperInputError } from "../errors.js";
+import type {
+  Link,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Provenance,
+  WorkUnit,
 } from "../types.js";
-import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
+import { iso, makeDisciplineMapper, makeScalarStream, pickSeries, subjectFor } from "./shared.js";
 import { elRe, els, first, numText, text } from "./xml.js";
 
 const wrappedValue = (xml: string, tag: string): number | undefined => {
@@ -74,8 +76,15 @@ interface Tp {
 }
 
 /** Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records (see file header for shape decisions). */
-export function mapTcx(xml: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
+export function mapTcx(xml: string, opts: MapOptions = {}): MapperResult {
+  // Structural minimum (WP7): a <TrainingCenterDatabase> root. Without it this
+  // isn't a TCX document; a valid TCX with no <Activity> (Courses/Workouts-only)
+  // stays a graceful empty result below.
+  if (first(xml, "TrainingCenterDatabase") === undefined)
+    throw new MapperInputError("tcx", "input contains no <TrainingCenterDatabase> element — not a TCX document");
+
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "tcx");
   const records: LiveRecord[] = [];
   let n = 0;
 
@@ -121,6 +130,13 @@ export function mapTcx(xml: string, opts: MapOptions = {}): LiveRecord[] {
     // Truthiness match with the original `t.time` filter ("" is untimed), and the type
     // predicate lets everything downstream read `time` without non-null assertions.
     const timed = tps.filter((t): t is Tp & { time: string } => !!t.time);
+    if (timed.length < tps.length) {
+      warnings.push({
+        code: "dropped-untimed-points",
+        message: `${tps.length - timed.length} of ${tps.length} trackpoints in ${base} carry no <Time> and were dropped from the sampleArray streams`,
+        context: { activity: base, dropped: tps.length - timed.length, total: tps.length },
+      });
+    }
     const measuredBy: Link[] = [];
     let mStart: string | undefined, mEnd: string | undefined;
     const firstTimed = timed[0];
@@ -239,6 +255,13 @@ export function mapTcx(xml: string, opts: MapOptions = {}): LiveRecord[] {
     });
   }
   // No <Activity> at all (e.g. a Courses- or Workouts-only file): unsupported content,
-  // reported gracefully as an empty document (see header).
-  return records;
+  // reported gracefully as an empty document (see header) — with the emptiness explained.
+  if (n === 0) {
+    warnings.push({
+      code: "no-mappable-content",
+      message:
+        "TCX document carries no <Activity> elements (Courses are planned routes, Workouts are prescriptions — documented unsupported) — nothing to map",
+    });
+  }
+  return { records, warnings };
 }

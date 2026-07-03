@@ -52,18 +52,20 @@
 //     ride), so it stays opaque-only. The raw Type string always rides in
 //     `exerciseRef.opaque` (§6.5 lossless floor).
 
-import {
-  DEFAULT_SUBJECT,
-  type ExerciseRefObject,
-  type Intensity,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Provenance,
-  type Session,
-  type WorkUnit,
+import type {
+  ExerciseRefObject,
+  Intensity,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Provenance,
+  Session,
+  WorkUnit,
 } from "../types.js";
-import { num, parseCsv, toRfc3339 } from "./csv.js";
+import { num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { subjectFor } from "./shared.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
 function parseClock(s: string | undefined): number | undefined {
@@ -141,9 +143,13 @@ function inferPiece(
 }
 
 /** Map a Concept2 Logbook season CSV export to OpenBody wire records (one Session per row). */
-export function mapConcept2(csv: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const rows = parseCsv(csv);
+export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "concept2");
+  const { header, rows } = parseCsvDoc(csv);
+  // Structural minimum (WP7): every row's window hangs off Date — without the column
+  // this is not a Concept2 season export (was a raw RangeError from Date arithmetic).
+  requireColumns("concept2", header, ["Date"]);
   const records: LiveRecord[] = [];
 
   rows.forEach((r, i) => {
@@ -276,5 +282,5 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): LiveRecord[] {
     records.push(session);
   });
 
-  return records;
+  return { records, warnings };
 }

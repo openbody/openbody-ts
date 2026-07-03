@@ -4,6 +4,7 @@
 // scripts/test-concept2-thecrag.ts.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapConcept2 } from "../../src/mappers/concept2.js";
 import {
   abs,
@@ -16,7 +17,7 @@ import {
   registryExercisesPath,
 } from "../helpers.js";
 
-const c2 = mapConcept2(readExample("concept2/concept2-season-sample.csv"));
+const c2 = mapConcept2(readExample("concept2/concept2-season-sample.csv")).records;
 const sess = (name: string) => ofKind(c2, "Session").find((r) => r.name === name);
 
 describe("mapConcept2", () => {
@@ -130,14 +131,23 @@ describe("mapConcept2", () => {
     for (const id of ids) expect(known.has(id), `exerciseRef id "${id}" not in the registry`).toBe(true);
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input maps to []", () => {
-      expect(mapConcept2("")).toEqual([]);
+  describe("errors + warnings (WP7 contract)", () => {
+    it("empty input throws MapperInputError (no header — not a Concept2 export)", () => {
+      expect(() => mapConcept2("")).toThrow(MapperInputError);
     });
-    // Current behavior: a row with no Date column reaches Date arithmetic on an empty
-    // string and throws a raw RangeError. Pinned as-is; a typed-error pass comes later.
-    it("rows missing the Date column throw a RangeError", () => {
-      expect(() => mapConcept2("a,b\n1,2")).toThrow(RangeError);
+    // WP7: the old raw RangeError (Date arithmetic on "") is now an explicit header check.
+    it("a header missing the Date column throws MapperInputError naming the column", () => {
+      expect(() => mapConcept2("a,b\n1,2")).toThrow(MapperInputError);
+      expect(() => mapConcept2("a,b\n1,2")).toThrow(/Date/);
+    });
+    it("header-only CSV maps to an empty result (empty-but-valid export)", () => {
+      const out = mapConcept2('"Log ID",Date,Description,Type\n');
+      expect(out.records).toEqual([]);
+    });
+    it("warns default-subject only when opts.subject is absent", () => {
+      const csv = readExample("concept2/concept2-season-sample.csv");
+      expect(mapConcept2(csv).warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapConcept2(csv, { subject: "me" }).warnings).toEqual([]);
     });
   });
 });

@@ -4,6 +4,7 @@
 // scripts/test-concept2-thecrag.ts.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapTheCrag } from "../../src/mappers/thecrag.js";
 import {
   collectExerciseRefIds,
@@ -15,7 +16,7 @@ import {
   registryExercisesPath,
 } from "../helpers.js";
 
-const crag = mapTheCrag(readExample("thecrag/thecrag-sample.csv"));
+const crag = mapTheCrag(readExample("thecrag/thecrag-sample.csv")).records;
 const sessions = ofKind(crag, "Session");
 const wus = sessions.flatMap((s) => s.workUnits ?? []);
 const byRoute = (name: string) => wus.find((w) => typeof w.notes === "string" && w.notes.startsWith(name));
@@ -109,15 +110,25 @@ describe("mapTheCrag", () => {
     for (const id of ids) expect(known.has(id), `exerciseRef id "${id}" not in the registry`).toBe(true);
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input maps to []", () => {
-      expect(mapTheCrag("")).toEqual([]);
+  describe("errors + warnings (WP7 contract)", () => {
+    it("empty input throws MapperInputError (no header — not a theCrag export)", () => {
+      expect(() => mapTheCrag("")).toThrow(MapperInputError);
     });
-    it("rows missing the expected columns do not throw (one degraded session out)", () => {
-      const out = ofKind(mapTheCrag("a,b\n1,2"), "Session");
+    // WP7: the fabricated degraded session is gone — a header without the ascent
+    // columns is structurally unusable and throws instead.
+    it("a header missing the ascent columns throws MapperInputError naming them", () => {
+      expect(() => mapTheCrag("a,b\n1,2")).toThrow(MapperInputError);
+      expect(() => mapTheCrag("a,b\n1,2")).toThrow(/Route Name, Ascent Type/);
+    });
+    it("date columns are NOT required — a dateless logbook degrades to undated sessions", () => {
+      const out = ofKind(mapTheCrag("Route Name,Ascent Type\nThe Bard,Onsight\n").records, "Session");
       expect(out).toHaveLength(1);
-      expect(out[0]?.recordType).toBe("Session");
-      expect(out[0]?.startTime).toBeUndefined(); // no Ascent Date column
+      expect(out[0]?.startTime).toBeUndefined();
+    });
+    it("warns default-subject only when opts.subject is absent", () => {
+      const csv = readExample("thecrag/thecrag-sample.csv");
+      expect(mapTheCrag(csv).warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapTheCrag(csv, { subject: "me" }).warnings).toEqual([]);
     });
   });
 });

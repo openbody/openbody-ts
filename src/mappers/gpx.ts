@@ -36,8 +36,9 @@
 // - The <gpx creator="…"> attribute is free-form vendor text, not a registry token,
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
-import { DEFAULT_SUBJECT, type Link, type LiveRecord, type MapOptions, type Provenance } from "../types.js";
-import { makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
+import { MapperInputError } from "../errors.js";
+import type { Link, LiveRecord, MapOptions, MapperResult, MapWarning, Provenance } from "../types.js";
+import { makeDisciplineMapper, makeScalarStream, pickSeries, subjectFor } from "./shared.js";
 import { els, first, numText, text } from "./xml.js";
 
 const DISC: Record<string, string> = {
@@ -73,8 +74,15 @@ interface Pt {
 }
 
 /** Map a GPX 1.1 (or 1.0) document string to OpenBody wire records (see file header for shape decisions). */
-export function mapGpx(xml: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
+export function mapGpx(xml: string, opts: MapOptions = {}): MapperResult {
+  // Structural minimum (WP7): a <gpx> root. Without it this isn't a GPX document at
+  // all; a valid GPX with nothing mappable (waypoint/route-only) stays a graceful
+  // empty result below.
+  const root = first(xml, "gpx");
+  if (root === undefined) throw new MapperInputError("gpx", "input contains no <gpx> element — not a GPX document");
+
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "gpx");
 
   const pts: Pt[] = [];
   let trkName: string | undefined, trkType: string | undefined;
@@ -95,9 +103,18 @@ export function mapGpx(xml: string, opts: MapOptions = {}): LiveRecord[] {
         });
       }
   }
-  if (pts.length === 0) return []; // waypoint-only / route-only / empty: nothing subject-observed (see header).
+  if (pts.length === 0) {
+    // Waypoint-only / route-only / trackpoint-less: nothing subject-observed (see
+    // header) — a valid empty result, with the emptiness explained on the channel.
+    warnings.push({
+      code: "no-mappable-content",
+      message:
+        "GPX document carries no <trkpt> track points (waypoints/routes are not observations of a subject) — nothing to map",
+    });
+    return { records: [], warnings };
+  }
 
-  const creator = first(xml, "gpx")?.attrs.creator;
+  const creator = root.attrs.creator;
   const gpxExt: Record<string, unknown> = {};
   if (creator) gpxExt.creator = creator;
   const prov: Provenance = { method: "sensor", sourceApp: "gpx" };
@@ -110,20 +127,36 @@ export function mapGpx(xml: string, opts: MapOptions = {}): LiveRecord[] {
   if (firstTimed === undefined) {
     // Untimed track: no offsets are representable (§4.3) — Session only, geometry kept losslessly.
     gpxExt.untimedTrack = { channels: ["lat", "lon", "alt"], points: pts.map((p) => [p.lat, p.lon, p.ele ?? null]) };
-    return [
-      {
-        id: "gpx-session",
-        recordType: "Session",
-        subject,
-        ...(trkName ? { name: trkName } : {}),
-        ...(discipline ? { disciplines: [discipline] } : {}),
-        intent: "train",
-        provenance: prov,
-        extension: { gpx: gpxExt },
-      },
-    ];
+    warnings.push({
+      code: "untimed-track",
+      message: `track has no <time> stamps — no sampleArray offsets are representable (§4.3), so only a Session was emitted with the raw geometry preserved in extension.gpx.untimedTrack`,
+      context: { points: pts.length },
+    });
+    return {
+      records: [
+        {
+          id: "gpx-session",
+          recordType: "Session",
+          subject,
+          ...(trkName ? { name: trkName } : {}),
+          ...(discipline ? { disciplines: [discipline] } : {}),
+          intent: "train",
+          provenance: prov,
+          extension: { gpx: gpxExt },
+        },
+      ],
+      warnings,
+    };
   }
-  if (timed.length < pts.length) gpxExt.droppedUntimedPoints = pts.length - timed.length;
+  if (timed.length < pts.length) {
+    const dropped = pts.length - timed.length;
+    gpxExt.droppedUntimedPoints = dropped;
+    warnings.push({
+      code: "dropped-untimed-points",
+      message: `${dropped} of ${pts.length} track points carry no <time> stamp and were dropped from the sampleArray streams (count preserved in extension.gpx.droppedUntimedPoints)`,
+      context: { dropped, total: pts.length },
+    });
+  }
 
   const start = firstTimed.time,
     end = (timed[timed.length - 1] ?? firstTimed).time;
@@ -191,5 +224,5 @@ export function mapGpx(xml: string, opts: MapOptions = {}): LiveRecord[] {
     ],
     ...(Object.keys(gpxExt).length ? { extension: { gpx: gpxExt } } : {}),
   });
-  return records;
+  return { records, warnings };
 }

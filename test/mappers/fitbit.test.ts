@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapFitbitTakeout } from "../../src/mappers/fitbit.js";
 import { abs, examplesDir, expectValidAndStable, ofKind } from "../helpers.js";
 
@@ -16,7 +17,7 @@ const files = fs
   .filter((f) => f.endsWith(".json"))
   .map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), "utf8") }));
 
-const records = mapFitbitTakeout(files, { utcOffset: "-08:00" });
+const { records } = mapFitbitTakeout(files, { utcOffset: "-08:00" });
 const measurements = ofKind(records, "Measurement");
 
 describe("mapFitbitTakeout", () => {
@@ -136,9 +137,9 @@ describe("mapFitbitTakeout", () => {
   });
 
   // 6. Robustness: unknown names, corrupt JSON, non-array JSON, empty input → no throw,
-  // no records; path-prefixed names still classify by basename.
-  describe("malformed input (behavior pinned)", () => {
-    it("junk/corrupt/non-array files are ignored", () => {
+  // no records — but each skipped/ignored file is now REPORTED on the warnings channel.
+  describe("errors + warnings (WP7 contract)", () => {
+    it("junk/corrupt/non-array files are skipped with per-file warnings", () => {
       const junk = mapFitbitTakeout([
         { name: "sessions.csv", text: "a,b\n1,2" },
         { name: "exercise-1.json", text: "{ not json" },
@@ -146,25 +147,66 @@ describe("mapFitbitTakeout", () => {
         { name: "heart_rate-2024-01-02.json", text: "[]" },
         { name: "Takeout/Fitbit/Global Export Data/weight-2024-02-01.json", text: "[]" },
       ]);
-      expect(junk).toEqual([]);
+      expect(junk.records).toEqual([]);
+      const by = (code: string) => junk.warnings.filter((w) => w.code === code).map((w) => w.context?.file);
+      expect(by("unrecognized-file")).toEqual(["sessions.csv"]);
+      expect(by("skipped-file")).toEqual(["exercise-1.json", "steps-2024-01-01.json"]);
     });
-    it("empty input maps to []", () => {
-      expect(mapFitbitTakeout([])).toEqual([]);
+    it("a clean mapping of the sample emits no warnings beyond default-subject", () => {
+      const out = mapFitbitTakeout(files, { utcOffset: "-08:00" });
+      expect(out.warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapFitbitTakeout(files, { utcOffset: "-08:00", subject: "me" }).warnings).toEqual([]);
+    });
+    it("a files list that is not { name, text } objects throws MapperInputError", () => {
+      // biome-ignore lint/suspicious/noExplicitAny: deliberately malformed input
+      expect(() => mapFitbitTakeout("exercise-1.json" as any)).toThrow(MapperInputError);
+      // biome-ignore lint/suspicious/noExplicitAny: deliberately malformed input
+      expect(() => mapFitbitTakeout([{ name: "exercise-1.json" }] as any)).toThrow(MapperInputError);
+    });
+    it("empty input maps to an empty result (an empty subset is a valid subset)", () => {
+      const out = mapFitbitTakeout([]);
+      expect(out.records).toEqual([]);
     });
     it("nested Takeout paths classify by basename", () => {
       const weightText = files.find((f) => f.name === "weight-2024-01-01.json")?.text ?? "[]";
       const nested = mapFitbitTakeout([
         { name: "Takeout/Fitbit/Global Export Data/weight-2024-01-01.json", text: weightText },
-      ]);
+      ]).records;
       expect(ofKind(nested, "Measurement").filter((r) => r.type === "body_mass")).toHaveLength(2);
     });
-    it("entries missing logId/startTime are skipped", () => {
-      expect(mapFitbitTakeout([{ name: "exercise-1.json", text: JSON.stringify([{ activityName: "Run" }]) }])).toEqual(
-        [],
-      );
-      expect(mapFitbitTakeout([{ name: "sleep-2024-01-01.json", text: JSON.stringify([{ duration: 1000 }]) }])).toEqual(
-        [],
-      );
+    it("entries missing logId/startTime are skipped with a per-file skipped-entries warning", () => {
+      const ex = mapFitbitTakeout([{ name: "exercise-1.json", text: JSON.stringify([{ activityName: "Run" }]) }]);
+      expect(ex.records).toEqual([]);
+      expect(ex.warnings.find((w) => w.code === "skipped-entries")?.context).toEqual({
+        file: "exercise-1.json",
+        count: 1,
+      });
+      const sl = mapFitbitTakeout([{ name: "sleep-2024-01-01.json", text: JSON.stringify([{ duration: 1000 }]) }]);
+      expect(sl.records).toEqual([]);
+      expect(sl.warnings.some((w) => w.code === "skipped-entries")).toBe(true);
+    });
+    it("an unrecognized distanceUnit routes the raw pair to extension residue WITH a warning", () => {
+      const out = mapFitbitTakeout([
+        {
+          name: "exercise-9.json",
+          text: JSON.stringify([
+            {
+              logId: 1,
+              activityName: "Run",
+              startTime: "01/06/24 07:00:00",
+              duration: 60000,
+              distance: 3.1,
+              distanceUnit: "Furlong",
+            },
+          ]),
+        },
+      ]);
+      const w = out.warnings.find((x) => x.code === "unknown-distance-unit");
+      expect(w?.context).toEqual({ file: "exercise-9.json", logId: "1", distanceUnit: "Furlong" });
+      const session = ofKind(out.records, "Session")[0];
+      expect(session?.extension?.fitbit?.distance).toBe(3.1);
+      expect(session?.extension?.fitbit?.distanceUnit).toBe("Furlong");
+      expect(session?.workUnits?.[0]?.performance?.distance, "unrecognized unit must not be mapped").toBeUndefined();
     });
   });
 });

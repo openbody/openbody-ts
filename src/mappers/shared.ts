@@ -1,10 +1,33 @@
 // Cross-format mapper plumbing shared by the telemetry mappers (strava.ts, fit.ts,
 // gpx.ts, tcx.ts, …). Internal, deliberately NOT re-exported from the package entry
 // (src/index.ts) — implementation details, not public API.
-import type { Link, LiveRecord, Provenance } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type Link,
+  type LiveRecord,
+  type MapOptions,
+  type MapWarning,
+  type Provenance,
+} from "../types.js";
 
 /** RFC 3339 at whole-second precision — trims the ".000" that toISOString always emits. */
 export const iso = (d: Date): string => d.toISOString().replace(/\.\d{3}Z$/, "Z");
+
+/**
+ * Resolve the subject id every record gets stamped with. When `opts.subject` is
+ * absent the shared placeholder DEFAULT_SUBJECT is used AND reported once on the
+ * warnings channel (code "default-subject") — the fallback is a fabrication, and
+ * per the WP7 policy (src/errors.ts) fabrications are never silent.
+ */
+export function subjectFor(opts: MapOptions, warnings: MapWarning[], mapper: string): string {
+  if (opts.subject !== undefined) return opts.subject;
+  warnings.push({
+    code: "default-subject",
+    message: `no MapOptions.subject provided — records carry the fabricated placeholder subject "${DEFAULT_SUBJECT}"; pass your own subject id`,
+    context: { mapper, subject: DEFAULT_SUBJECT },
+  });
+  return DEFAULT_SUBJECT;
+}
 
 /**
  * The shared discipline-token mechanism (§4.4 open-token ladder): look a vendor

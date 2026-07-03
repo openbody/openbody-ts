@@ -16,20 +16,22 @@
 // with a decoder of their choice (e.g. `fit-file-parser`, MIT) and hands over the resulting
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
-import {
-  type Block,
-  DEFAULT_SUBJECT,
-  type Extension,
-  type Link,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Prescription,
-  type Provenance,
-  type TargetWithRamp,
-  type WorkUnit,
+import { MapperInputError } from "../errors.js";
+import type {
+  Block,
+  Extension,
+  Link,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Prescription,
+  Provenance,
+  TargetWithRamp,
+  WorkUnit,
 } from "../types.js";
-import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
+import { iso, makeDisciplineMapper, makeScalarStream, pickSeries, subjectFor } from "./shared.js";
 
 interface DecodedRecord {
   timestamp: string;
@@ -187,8 +189,15 @@ function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): WorkUnit {
   };
 }
 
-function mapWorkout(data: FitInput, subject: string): LiveRecord[] {
+function mapWorkout(data: FitInput, subject: string, warnings: MapWarning[]): LiveRecord[] {
   const wkt = data.workouts?.[0];
+  if ((data.workouts?.length ?? 0) > 1) {
+    warnings.push({
+      code: "extra-workouts-dropped",
+      message: `decode carries ${data.workouts?.length} workout messages — only the first was mapped`,
+      context: { count: data.workouts?.length },
+    });
+  }
   const steps = [...(data.workout_steps ?? [])].sort((a, b) => indexOf(a.message_index) - indexOf(b.message_index));
 
   const entries: { record: Block; minIdx: number }[] = [];
@@ -233,8 +242,24 @@ function mapWorkout(data: FitInput, subject: string): LiveRecord[] {
   ];
 }
 
-function mapActivity(data: FitInput, subject: string): LiveRecord[] {
+function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): LiveRecord[] {
   const s = data.sessions?.[0];
+  if ((data.sessions?.length ?? 0) > 1) {
+    warnings.push({
+      code: "extra-sessions-dropped",
+      message: `decode carries ${data.sessions?.length} session messages — only the first was mapped`,
+      context: { count: data.sessions?.length },
+    });
+  }
+  if (data.laps?.length) {
+    // Lap messages (per-lap splits) have no mapping yet — the session totals cover the
+    // whole recording, but the per-lap breakdown is genuinely dropped.
+    warnings.push({
+      code: "laps-dropped",
+      message: `decode carries ${data.laps.length} lap message(s) — per-lap splits are not mapped (session totals cover the recording)`,
+      context: { count: data.laps.length },
+    });
+  }
   const records = data.records ?? [];
   const start = s?.start_time ?? records[0]?.timestamp;
   // `start` is defined on every path that reads it: `s` guarantees start_time, and the
@@ -305,7 +330,26 @@ function mapActivity(data: FitInput, subject: string): LiveRecord[] {
 }
 
 /** Map a decoded FIT activity or workout file to OpenBody wire records (see file header for the decode-input contract). */
-export function mapFit(input: FitInput, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-  return input.workouts?.length ? mapWorkout(input, subject) : mapActivity(input, subject);
+export function mapFit(input: FitInput, opts: MapOptions = {}): MapperResult {
+  // Structural minimum (WP7): the decoded message-list shape. A decode with NONE of
+  // the message lists present isn't the documented `mode: "list"` output of any FIT
+  // file — fabricating a Session from zero messages would be dishonest.
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    (input.sessions === undefined &&
+      input.laps === undefined &&
+      input.records === undefined &&
+      input.workouts === undefined &&
+      input.workout_steps === undefined)
+  ) {
+    throw new MapperInputError(
+      "fit",
+      'input carries none of the decoded FIT message lists (sessions/laps/records/workouts/workout_steps) — pass a FIT decoder\'s mode:"list" output',
+    );
+  }
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "fit");
+  const records = input.workouts?.length ? mapWorkout(input, subject, warnings) : mapActivity(input, subject, warnings);
+  return { records, warnings };
 }

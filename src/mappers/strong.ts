@@ -1,25 +1,30 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import {
-  DEFAULT_SUBJECT,
-  type Exercise,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Session,
-  type WorkUnit,
+import type {
+  Exercise,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Session,
+  WorkUnit,
 } from "../types.js";
-import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
+import { contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { subjectFor } from "./shared.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
-export function mapStrong(csv: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
+export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "strong");
   const off = opts.utcOffset ?? "Z";
   // Delimiter sniffed from the header (Strong exports "," or ";" by locale); the shared
   // quoted-CSV parser handles commas/newlines inside quoted workout names and notes.
   const delim = (csv.trimStart().split("\n")[0] ?? "").includes(";") ? ";" : ",";
-  const rows = parseCsv(csv, delim);
+  const { header, rows } = parseCsvDoc(csv, delim);
+  // Structural minimum (WP7): the columns the session key + set mapping hang off.
+  requireColumns("strong", header, ["Date", "Workout Name", "Exercise Name"]);
 
   const byWorkout = new Map<string, Record<string, string>[]>();
   for (const r of rows) {
@@ -86,5 +91,5 @@ export function mapStrong(csv: string, opts: MapOptions = {}): LiveRecord[] {
     }));
     records.push(session);
   }
-  return records;
+  return { records, warnings };
 }

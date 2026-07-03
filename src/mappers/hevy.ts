@@ -1,24 +1,29 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import {
-  type Block,
-  DEFAULT_SUBJECT,
-  type Exercise,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Session,
-  type WorkUnit,
+import type {
+  Block,
+  Exercise,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Session,
+  WorkUnit,
 } from "../types.js";
-import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
+import { contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { subjectFor } from "./shared.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
 /** Map a Hevy CSV export to OpenBody wire records (one Session per workout). */
-export function mapHevy(csv: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const rows = parseCsv(csv);
+export function mapHevy(csv: string, opts: MapOptions = {}): MapperResult {
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "hevy");
+  const { header, rows } = parseCsvDoc(csv);
+  // Structural minimum (WP7): the session key + exercise grouping columns.
+  requireColumns("hevy", header, ["title", "start_time", "exercise_title"]);
 
   const sessions = new Map<string, Record<string, string>[]>();
   for (const r of rows) {
@@ -112,5 +117,5 @@ export function mapHevy(csv: string, opts: MapOptions = {}): LiveRecord[] {
     }
     records.push(session);
   }
-  return records;
+  return { records, warnings };
 }

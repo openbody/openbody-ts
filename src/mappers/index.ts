@@ -1,7 +1,9 @@
 // OpenBody mapper SDK: convert incumbent export formats into OpenBody wire records.
-// Each mapper is a pure function (input → records[]); validate/normalize with the
-// core (`validate`, `normalizeDocument`). Health Connect is covered by the Apple
-// Health mapper (documented identical mapping).
+// Each mapper is a pure function (input → MapperResult { records, warnings });
+// structurally unusable input throws MapperInputError, degraded/skipped/defaulted
+// data is reported on the warnings channel (the WP7 policy — see src/errors.ts).
+// Validate/normalize with the core (`validate`, `normalizeDocument`). Health Connect
+// is covered by the Apple Health mapper (documented identical mapping).
 
 export { mapAppleHealth } from "./apple-health.js";
 export { mapConcept2 } from "./concept2.js";

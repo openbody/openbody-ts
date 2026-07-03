@@ -2,6 +2,7 @@
 // (no invented manufacturer, no dangling derivedFrom, clear missing-stream error).
 // Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapStrava } from "../../src/mappers/index.js";
 import { expectAllValid, expectValidAndStable, ofKind, readExample } from "../helpers.js";
 
@@ -9,21 +10,21 @@ const sample = () => JSON.parse(readExample("strava/strava-sample.json"));
 
 describe("mapStrava", () => {
   it("maps the sample activity+streams to valid, round-trip-stable wire records", () => {
-    expectValidAndStable(mapStrava(sample()));
+    expectValidAndStable(mapStrava(sample()).records);
   });
 
   it("maps the activity title to Session.name (absent title → no name field)", () => {
-    const session = mapStrava(sample()).find((r) => r.recordType === "Session");
+    const session = mapStrava(sample()).records.find((r) => r.recordType === "Session");
     expect(session?.name).toBe("Morning Run");
     const untitled = sample();
     delete untitled.activity.name;
-    const s2 = mapStrava(untitled).find((r) => r.recordType === "Session");
+    const s2 = mapStrava(untitled).records.find((r) => r.recordType === "Session");
     expect(s2 && "name" in s2, "no fabricated name when the activity has none").toBe(false);
   });
 
   // device_name is a free-form display string; the manufacturer is never invented.
   it("never fabricates a device manufacturer from device_name", () => {
-    const withHr = mapStrava(sample());
+    const withHr = mapStrava(sample()).records;
     const dev = withHr.find((r) => r.recordType === "Session")?.provenance?.device;
     expect(dev?.manufacturer).toBeUndefined();
     expect(dev?.model).toBe("Garmin Forerunner 965");
@@ -34,7 +35,7 @@ describe("mapStrava", () => {
   it("emits HR aggregates without dangling derivedFrom when the HR stream is absent", () => {
     const noHrInput = sample();
     delete noHrInput.streams.heartrate;
-    const noHr = mapStrava(noHrInput);
+    const noHr = mapStrava(noHrInput).records;
     const ids = new Set(noHr.map((r) => r.id));
     for (const r of noHr) {
       for (const l of r.links ?? []) {
@@ -50,18 +51,26 @@ describe("mapStrava", () => {
     expectAllValid(noHr);
   });
 
-  it("errors clearly when the time stream is missing", () => {
+  it("throws MapperInputError (clear message) when the time stream is missing", () => {
     const input = sample();
+    expect(() => mapStrava({ activity: input.activity, streams: {} })).toThrow(MapperInputError);
     expect(() => mapStrava({ activity: input.activity, streams: {} })).toThrow(/streams\.time/);
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input object throws the clear streams.time error (not a raw TypeError)", () => {
+  describe("errors + warnings (WP7 contract)", () => {
+    it("empty input object throws the clear streams.time MapperInputError (not a raw TypeError)", () => {
       expect(() => mapStrava({ activity: {}, streams: {} })).toThrow(/streams\.time/);
     });
-    it("activity missing its timing fields throws (invalid Date arithmetic)", () => {
-      // Current behavior: elapsed_time undefined → NaN epoch → toISOString RangeError.
-      expect(() => mapStrava({ activity: {}, streams: { time: { data: [0, 1] } } })).toThrow(RangeError);
+    it("activity missing its timing fields throws MapperInputError naming the field (was a RangeError)", () => {
+      expect(() => mapStrava({ activity: {}, streams: { time: { data: [0, 1] } } })).toThrow(MapperInputError);
+      expect(() => mapStrava({ activity: {}, streams: { time: { data: [0, 1] } } })).toThrow(/start_date/);
+      const noElapsed = sample();
+      delete noElapsed.activity.elapsed_time;
+      expect(() => mapStrava(noElapsed)).toThrow(/elapsed_time/);
+    });
+    it("warns default-subject only when opts.subject is absent", () => {
+      expect(mapStrava(sample()).warnings.map((w) => w.code)).toEqual(["default-subject"]);
+      expect(mapStrava(sample(), { subject: "me" }).warnings).toEqual([]);
     });
   });
 });

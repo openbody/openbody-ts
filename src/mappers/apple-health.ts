@@ -3,9 +3,10 @@
 // parity); this mapper covers both shapes. Everything lives in element attributes
 // (<Record .../> / <Workout .../> are usually self-closing), parsed with the shared
 // regex-XML helpers (src/mappers/xml.ts — no DOM, zero deps).
-import { DEFAULT_SUBJECT, type LiveRecord, type MapOptions, type Performance, type Provenance } from "../types.js";
-import { makeDisciplineMapper } from "./shared.js";
-import { els } from "./xml.js";
+import { MapperInputError } from "../errors.js";
+import type { LiveRecord, MapOptions, MapperResult, MapWarning, Performance, Provenance } from "../types.js";
+import { makeDisciplineMapper, subjectFor } from "./shared.js";
+import { els, first } from "./xml.js";
 
 const rfc = (s: string) =>
   s
@@ -29,11 +30,36 @@ const qtyFor = makeDisciplineMapper(QTY, "apple");
 const discFor = makeDisciplineMapper(DISC, "apple");
 
 /** Map an Apple Health export.xml string to OpenBody wire records. */
-export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
+export function mapAppleHealth(xml: string, opts: MapOptions = {}): MapperResult {
+  // Structural minimum (WP7): a <HealthData> root. Without it this isn't an Apple
+  // Health export.xml (or a Health Connect export); a valid export with no
+  // <Record>/<Workout> elements stays a graceful empty result.
+  if (first(xml, "HealthData") === undefined)
+    throw new MapperInputError(
+      "apple-health",
+      "input contains no <HealthData> element — not an Apple Health export.xml",
+    );
+
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "apple-health");
   const records: LiveRecord[] = [];
   const hrRecords: { ref: string; s: number; e: number }[] = [];
+  // Elements dropped because this mapper has no encoding for their type — counted per
+  // type and reported once (a real export carries thousands of unmapped-type Records).
+  const unmappedTypes = new Map<string, number>();
   let i = 0;
+
+  // A <Record>/<Workout> missing an attribute the encoding hangs off (its window, its
+  // value) degrades to a skip + warning — emitting a record with a fabricated/NaN
+  // field would be dishonest, and per the WP7 policy missing data never throws.
+  const skip = (element: string, index: number, missing: string[]) => {
+    warnings.push({
+      code: "skipped-record",
+      message: `<${element}> #${index} is missing required attribute(s) ${missing.join(", ")} — skipped`,
+      context: { element, index, missing },
+    });
+  };
+  const missingOf = (a: Record<string, string>, keys: string[]) => keys.filter((k) => !a[k]);
 
   for (const { attrs: a } of els(xml, "Record")) {
     i++;
@@ -43,6 +69,11 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[]
       device: { manufacturer: "apple", model: a.sourceName },
     };
     if (a.type?.startsWith("HKQuantityTypeIdentifier")) {
+      const missing = missingOf(a, ["value", "startDate", "endDate"]);
+      if (missing.length) {
+        skip("Record", i, missing);
+        continue;
+      }
       const id = `apple-q-${i}`;
       records.push({
         id,
@@ -58,6 +89,11 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[]
       if (a.type === "HKQuantityTypeIdentifierHeartRate")
         hrRecords.push({ ref: id, s: Date.parse(rfc(a.startDate ?? "")), e: Date.parse(rfc(a.endDate ?? "")) });
     } else if (a.type === "HKCategoryTypeIdentifierSleepAnalysis") {
+      const missing = missingOf(a, ["value", "startDate", "endDate"]);
+      if (missing.length) {
+        skip("Record", i, missing);
+        continue;
+      }
       // §4.3: sleep stages are multiple category Measurements over adjacent intervals.
       const stage = (a.value ?? "")
         .replace("HKCategoryValueSleepAnalysis", "")
@@ -73,11 +109,21 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[]
         endTime: rfc(a.endDate ?? ""),
         provenance: prov,
       });
+    } else {
+      // A <Record> type this mapper has no encoding for (other HKCategory*, clinical
+      // records, …) — dropped, counted, reported once below.
+      const t = a.type ?? "(no type)";
+      unmappedTypes.set(t, (unmappedTypes.get(t) ?? 0) + 1);
     }
   }
 
   for (const { attrs: a } of els(xml, "Workout")) {
     i++;
+    const missing = missingOf(a, ["startDate", "endDate"]);
+    if (missing.length) {
+      skip("Workout", i, missing);
+      continue;
+    }
     const start = rfc(a.startDate ?? ""),
       end = rfc(a.endDate ?? "");
     const durSec = a.durationUnit === "min" ? Number(a.duration) * 60 : Number(a.duration);
@@ -111,5 +157,14 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[]
       ],
     });
   }
-  return records;
+
+  if (unmappedTypes.size) {
+    const total = [...unmappedTypes.values()].reduce((s, c) => s + c, 0);
+    warnings.push({
+      code: "unmapped-record-types",
+      message: `${total} <Record> element(s) of ${unmappedTypes.size} type(s) this mapper has no encoding for were dropped`,
+      context: { counts: Object.fromEntries(unmappedTypes) },
+    });
+  }
+  return { records, warnings };
 }

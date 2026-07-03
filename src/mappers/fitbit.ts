@@ -36,16 +36,18 @@
 // UTC (mapped with "Z"); everything else is local wall-clock time — pass opts.utcOffset
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
-import {
-  DEFAULT_SUBJECT,
-  type Link,
-  type LiveRecord,
-  type MapOptions,
-  type Performance,
-  type Provenance,
-  type WireRecord,
+import { MapperInputError } from "../errors.js";
+import type {
+  Link,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Provenance,
+  WireRecord,
 } from "../types.js";
-import { makeDisciplineMapper } from "./shared.js";
+import { makeDisciplineMapper, subjectFor } from "./shared.js";
 
 export interface FitbitFile {
   name: string;
@@ -114,22 +116,63 @@ const fixed = (n: number): number | { coefficient: number; exponent: number } =>
     : { coefficient: Number(s.replace(".", "")), exponent: dot + 1 - s.length };
 };
 
-// WireRecord-loose: raw Takeout JSON rows, not OpenBody records — accessed dynamically below.
-const parseArray = (text: string): WireRecord[] => {
-  try {
-    const v = JSON.parse(text);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-};
 const basename = (name: string) => name.split("/").pop() ?? name;
 
 /** Map any subset of a Google Takeout Fitbit folder ({ name, text } JSON files) to OpenBody wire records. */
-export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): LiveRecord[] {
-  const subject = opts.subject ?? DEFAULT_SUBJECT;
+export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): MapperResult {
+  // Structural minimum (WP7): a list of { name, text } files — the documented input shape.
+  if (!Array.isArray(files))
+    throw new MapperInputError("fitbit", "input must be an array of { name, text } Takeout files");
+  for (const f of files) {
+    if (!f || typeof f.name !== "string" || typeof f.text !== "string")
+      throw new MapperInputError("fitbit", "every input file must be a { name: string, text: string } object");
+  }
+
+  const warnings: MapWarning[] = [];
+  const subject = subjectFor(opts, warnings, "fitbit");
   const off = opts.utcOffset ?? "Z";
   const records: LiveRecord[] = [];
+
+  // WireRecord-loose: raw Takeout JSON rows, not OpenBody records — accessed dynamically
+  // below. A recognized-kind file that isn't a JSON array is skipped WITH a warning
+  // (pre-WP7 this was a silent swallow).
+  const parseArray = (f: FitbitFile): WireRecord[] => {
+    let v: unknown;
+    try {
+      v = JSON.parse(f.text);
+    } catch {
+      warnings.push({
+        code: "skipped-file",
+        message: `${f.name}: not valid JSON — file skipped`,
+        context: { file: f.name },
+      });
+      return [];
+    }
+    if (!Array.isArray(v)) {
+      warnings.push({
+        code: "skipped-file",
+        message: `${f.name}: expected a JSON array of Takeout entries, got ${v === null ? "null" : typeof v} — file skipped`,
+        context: { file: f.name },
+      });
+      return [];
+    }
+    return v;
+  };
+  // Entries inside a recognized file that are missing the fields their encoding hangs
+  // off (logId, a parseable timestamp, …) — counted per file, reported once per file.
+  let skippedEntries = 0;
+  const skipEntry = () => {
+    skippedEntries++;
+  };
+  const flushSkippedEntries = (file: string) => {
+    if (skippedEntries === 0) return;
+    warnings.push({
+      code: "skipped-entries",
+      message: `${file}: ${skippedEntries} entr${skippedEntries === 1 ? "y" : "ies"} missing required fields (id/timestamp/value) — skipped`,
+      context: { file, count: skippedEntries },
+    });
+    skippedEntries = 0;
+  };
   const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fitbit" });
   // §7.4: derived summaries Fitbit computed on-device/server; version is not published.
   const summaryAlg = (name: string): Provenance => ({
@@ -175,9 +218,12 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
   for (const f of files) {
     const b = basename(f.name);
     if (/^exercise-\d+\.json$/.test(b)) {
-      for (const x of parseArray(f.text)) {
+      for (const x of parseArray(f)) {
         const startIso = usToIso(String(x.startTime ?? ""));
-        if (x.logId == null || !startIso) continue;
+        if (x.logId == null || !startIso) {
+          skipEntry();
+          continue;
+        }
         const durMs = Number(x.activeDuration ?? x.duration ?? 0);
         const start = startIso + off,
           end = isoAt(epoch(startIso) + durMs) + off;
@@ -216,11 +262,17 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         if (x.distance != null) {
           const unit = DIST_UNIT[x.distanceUnit];
           // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
-          // value+unit pair rides the extension.fitbit residue rail instead.
+          // value+unit pair rides the extension.fitbit residue rail instead (and the
+          // routing is reported on the warnings channel).
           if (unit) perf.distance = { absolute: { value: x.distance, unit } };
           else {
             extra.distance = x.distance;
             if (x.distanceUnit != null) extra.distanceUnit = x.distanceUnit;
+            warnings.push({
+              code: "unknown-distance-unit",
+              message: `${f.name}: activity ${x.logId} carries an unrecognized distanceUnit ${JSON.stringify(x.distanceUnit ?? null)} — distance kept as raw residue in extension.fitbit, not mapped to performance.distance`,
+              context: { file: f.name, logId: String(x.logId), distanceUnit: x.distanceUnit ?? null },
+            });
           }
         }
         if (x.calories != null) perf.energy = { absolute: { value: x.calories, unit: "kcal" } };
@@ -250,18 +302,23 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         });
       }
     } else if (/^steps-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f.text)) {
+      for (const x of parseArray(f)) {
         const iso = usToIso(String(x.dateTime ?? ""));
         if (iso && x.value != null) intraday.steps.push({ e: epoch(iso), iso, v: Number(x.value) });
+        else skipEntry();
       }
     } else if (/^heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f.text)) {
+      for (const x of parseArray(f)) {
         const iso = usToIso(String(x.dateTime ?? ""));
         if (iso && x.value?.bpm != null) intraday.heart_rate.push({ e: epoch(iso), iso, v: x.value.bpm });
+        else skipEntry();
       }
     } else if (/^sleep-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const log of parseArray(f.text)) {
-        if (log.logId == null || !log.startTime) continue;
+      for (const log of parseArray(f)) {
+        if (log.logId == null || !log.startTime) {
+          skipEntry();
+          continue;
+        }
         const lid = `fitbit-sleep-${log.logId}`;
         const start = stripFrac(String(log.startTime)) + off;
         const end = log.endTime
@@ -342,9 +399,12 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         }
       }
     } else if (/^weight-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f.text)) {
+      for (const x of parseArray(f)) {
         const iso = x.date && x.time ? usToIso(`${x.date} ${x.time}`) : undefined;
-        if (x.logId == null || !iso || x.weight == null) continue;
+        if (x.logId == null || !iso || x.weight == null) {
+          skipEntry();
+          continue;
+        }
         const t = iso + off;
         // Takeout weight is exported in pounds regardless of profile units (community-
         // documented); kept as UCUM [lb_av] rather than converted — lossless per §4.2.
@@ -392,10 +452,14 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
           });
       }
     } else if (/^resting_heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f.text)) {
+      for (const x of parseArray(f)) {
         const iso = usToIso(String(x.dateTime ?? ""));
         const v = x.value?.value;
-        if (!iso || v == null || v === 0) continue; // days without data export as 0
+        if (v === 0) continue; // documented no-data marker — days without data export as 0, not a loss
+        if (!iso || v == null) {
+          skipEntry();
+          continue;
+        }
         const day = iso.slice(0, 10);
         records.push({
           id: `fitbit-rhr-${day}`,
@@ -409,11 +473,18 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
           provenance: prov("estimated"), // Fitbit RHR is a model estimate (the export carries an `error` term)
         });
       }
+    } else {
+      // Not a recognized Fitbit Takeout kind — ignored, but no longer silently.
+      warnings.push({
+        code: "unrecognized-file",
+        message: `${f.name}: not a recognized Fitbit Takeout file kind (exercise/steps/heart_rate/sleep/weight/resting_heart_rate) — ignored`,
+        context: { file: f.name },
+      });
     }
-    // any other file: not a recognized Fitbit Takeout kind — ignored.
+    flushSkippedEntries(f.name);
   }
 
   daySeries("steps", intraday.steps);
   daySeries("heart_rate", intraday.heart_rate);
-  return records;
+  return { records, warnings };
 }

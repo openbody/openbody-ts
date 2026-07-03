@@ -2,6 +2,7 @@
 // WP1 regression: HR records link (measuredBy) only to the workout whose window
 // encloses them. Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
+import { MapperInputError } from "../../src/errors.js";
 import { mapAppleHealth } from "../../src/mappers/index.js";
 import { expectValidAndStable, ofKind, readExample } from "../helpers.js";
 
@@ -9,12 +10,12 @@ const xml = readExample("apple-health/export-sample.xml");
 
 describe("mapAppleHealth", () => {
   it("maps the sample export.xml to valid, round-trip-stable wire records", () => {
-    const records = mapAppleHealth(xml);
+    const { records } = mapAppleHealth(xml);
     expectValidAndStable(records);
   });
 
   it("links HR measurements only to the enclosing workout window (§7.2)", () => {
-    const records = mapAppleHealth(xml);
+    const { records } = mapAppleHealth(xml);
     const sessions = records.filter((r) => r.recordType === "Session");
     expect(sessions.length).toBeGreaterThan(0);
     for (const s of sessions) {
@@ -38,15 +39,46 @@ describe("mapAppleHealth", () => {
       `<HealthData><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Tom &amp; Jerry&#8217;s Watch"
         unit="count/min" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 06:30:00 +0000" value="72"/></HealthData>`,
     );
-    expect(out[0]?.provenance?.device?.model).toBe("Tom & Jerry’s Watch");
+    expect(out.records[0]?.provenance?.device?.model).toBe("Tom & Jerry’s Watch");
   });
 
-  describe("malformed input (behavior pinned)", () => {
-    it("empty input maps to []", () => {
-      expect(mapAppleHealth("")).toEqual([]);
+  describe("errors + warnings (WP7 contract)", () => {
+    it("input without a <HealthData> root throws MapperInputError", () => {
+      expect(() => mapAppleHealth("")).toThrow(MapperInputError);
+      expect(() => mapAppleHealth("not xml at all")).toThrow(/HealthData/);
     });
-    it("XML without Record/Workout elements maps to []", () => {
-      expect(mapAppleHealth('<HealthData><ExportDate value="x"/></HealthData>')).toEqual([]);
+    it("a valid export without Record/Workout elements maps to an empty result", () => {
+      const out = mapAppleHealth('<HealthData><ExportDate value="x"/></HealthData>');
+      expect(out.records).toEqual([]);
+    });
+    it("Records missing required attrs degrade to a skip + warning (never a throw)", () => {
+      const out = mapAppleHealth(
+        `<HealthData>
+          <Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 06:30:00 +0000"/>
+          <Workout workoutActivityType="HKWorkoutActivityTypeRunning"/>
+        </HealthData>`,
+      );
+      expect(out.records).toEqual([]);
+      const skipped = out.warnings.filter((w) => w.code === "skipped-record");
+      expect(skipped).toHaveLength(2);
+      expect(skipped[0]?.context?.missing).toEqual(["value"]);
+      expect(skipped[1]?.context?.missing).toEqual(["startDate", "endDate"]);
+    });
+    it("Record types with no encoding are dropped with one aggregated warning", () => {
+      const out = mapAppleHealth(
+        `<HealthData>
+          <Record type="HKCategoryTypeIdentifierMindfulSession" startDate="2026-06-20 06:30:00 +0000" endDate="2026-06-20 06:40:00 +0000" value="x"/>
+          <Record type="HKCategoryTypeIdentifierMindfulSession" startDate="2026-06-21 06:30:00 +0000" endDate="2026-06-21 06:40:00 +0000" value="x"/>
+        </HealthData>`,
+      );
+      expect(out.records).toEqual([]);
+      const w = out.warnings.find((x) => x.code === "unmapped-record-types");
+      expect(w).toBeDefined();
+      expect(w?.context?.counts).toEqual({ HKCategoryTypeIdentifierMindfulSession: 2 });
+    });
+    it("warns default-subject when opts.subject is absent, and not when it is passed", () => {
+      expect(mapAppleHealth(xml).warnings.some((w) => w.code === "default-subject")).toBe(true);
+      expect(mapAppleHealth(xml, { subject: "me" }).warnings.some((w) => w.code === "default-subject")).toBe(false);
     });
   });
 });
