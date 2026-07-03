@@ -9,9 +9,10 @@ import { normalizeDocument } from "../../src/normalize.js";
 import { validate } from "../../src/schema-loader-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const records = mapConcept2(fs.readFileSync(path.join(here, "concept2-season-sample.csv"), "utf8"));
+const { records, warnings } = mapConcept2(fs.readFileSync(path.join(here, "concept2-season-sample.csv"), "utf8"));
 
-console.log(`Mapped Concept2 season CSV -> ${records.length} OpenBody record(s).\n`);
+console.log(`Mapped Concept2 season CSV -> ${records.length} OpenBody record(s) (${warnings.length} warnings).\n`);
+for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
 const intervals = records.find((r) => r.recordType === "Session" && r.blocks);
 console.log(`Interval Session JSON (wire form):\n${JSON.stringify(intervals, null, 2)}\n`);
 

@@ -10,9 +10,10 @@ import { normalizeDocument } from "../../src/normalize.js";
 import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const records = mapAppleHealth(fs.readFileSync(path.join(here, "export-sample.xml"), "utf8"));
+const { records, warnings } = mapAppleHealth(fs.readFileSync(path.join(here, "export-sample.xml"), "utf8"));
 
-console.log(`Mapped Apple Health export -> ${records.length} OpenBody records.\n`);
+console.log(`Mapped Apple Health export -> ${records.length} OpenBody records (${warnings.length} warnings).\n`);
+for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
 let bad = 0;
 for (const r of records) {
   const v = validate(r);

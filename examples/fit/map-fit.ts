@@ -17,8 +17,9 @@ for (const [name, file] of [
   ["activity", "fit-activity-sample.json"],
   ["workout", "fit-workout-sample.json"],
 ] as const) {
-  const records = mapFit(read(file));
-  console.log(`Mapped FIT ${name} -> ${records.length} OpenBody records.\n`);
+  const { records, warnings } = mapFit(read(file));
+  console.log(`Mapped FIT ${name} -> ${records.length} OpenBody records (${warnings.length} warnings).\n`);
+  for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
   let bad = 0;
   for (const r of records) {
     const v = validate(r);

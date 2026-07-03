@@ -52,6 +52,41 @@ records, plus a conformance-vector runner.
 This is the artifact that makes the conformance vectors *executable*: it pins the
 canonical bytes the spec describes.
 
+## Errors & warnings
+
+One small typed hierarchy (`src/errors.ts`), all exported from the package root:
+`OpenBodyError` (base, with a machine-readable `code`) and its three subclasses
+`MapperInputError`, `NormalizeError`, `ParseError`. The per-layer policy:
+
+- **`validate`** reports invalid documents via its result object (`{ valid, errors }`)
+  — it never throws on an invalid doc.
+- **`parseLossless`** throws `ParseError` on malformed JSON text (carries the failure
+  character `offset`).
+- **`normalizeDocument`/`equivalent`** throw `NormalizeError` on structurally
+  malformed records (invalid `roundScheme`/`sets` combinations, non-numeric
+  fixed-point parts).
+- **Inbound mappers** return a `MapperResult` — `{ records, warnings }`. They throw
+  `MapperInputError` only when the input is *structurally unusable* (wrong file
+  shape, missing required column/stream), and **never** on merely-missing optional
+  data: that degrades and is reported on the warnings channel instead
+  (`MapWarning { code, message, context? }` — e.g. `default-subject` when no
+  `subject` option was passed, `skipped-file` for a corrupt Takeout file,
+  `dropped-untimed-points` for untimed GPX/TCX points).
+- **The outbound Strong mapper** keeps its established contract: best-effort
+  `{ csv, omissions }`, throwing only under `{ strict: true }`.
+
+```ts
+import { mapHevy, MapperInputError } from "@openbody/openbody-ts";
+
+try {
+  const { records, warnings } = mapHevy(csvText, { subject: "athlete-1" });
+  for (const w of warnings) console.warn(`${w.code}: ${w.message}`);
+} catch (e) {
+  if (e instanceof MapperInputError) console.error(`not a usable export: ${e.message}`);
+  else throw e;
+}
+```
+
 ## Install (as a dependency)
 
 Not yet published to npm (`OB-11` — packaging is ready; publish itself is a
@@ -177,6 +212,7 @@ lossy float64 path.
 | `src/validate.ts` | JSON Schema validation (ajv), browser-safe — validates against the vendored schema, no `node:*` imports |
 | `src/schema-loader-node.ts` | Node-only: `OPENBODY_STANDARD`-aware schema resolution + `standardDir`, used by dev/test scripts; not exported from `src/index.ts` |
 | `src/parse.ts` | lossless decimal JSON parse (`parseLossless` / `LosslessNumber`) |
+| `src/errors.ts` | the typed error hierarchy (`OpenBodyError` / `MapperInputError` / `NormalizeError` / `ParseError`) + the per-layer error policy |
 | `src/resolve.ts` | §6.5 exercise-name resolver (`resolveExerciseRef` / `sourceNameForId`), browser-safe — static import of the vendored crosswalk snapshot |
 | `src/mappers/` | incumbent → OpenBody mappers (Hevy/Strong/Strava/Apple/FIT) + index; `to-strong.ts` is the reverse (OpenBody → Strong CSV) mapper |
 | `scripts/run-vectors.ts` | conformance-vector runner |

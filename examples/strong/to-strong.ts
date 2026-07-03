@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { mapOpenBodyToStrong, mapStrong } from "../../src/mappers/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const records = mapStrong(fs.readFileSync(path.join(here, "strong-sample.csv"), "utf8"));
+const { records } = mapStrong(fs.readFileSync(path.join(here, "strong-sample.csv"), "utf8"));
 
 // Faithful case: everything in the sample fits Strong's columns → zero omissions.
 const out = mapOpenBodyToStrong(records);

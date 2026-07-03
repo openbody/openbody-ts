@@ -9,9 +9,10 @@ import { normalizeDocument } from "../../src/normalize.js";
 import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const records = mapHevy(fs.readFileSync(path.join(here, "hevy-sample.csv"), "utf8"));
+const { records, warnings } = mapHevy(fs.readFileSync(path.join(here, "hevy-sample.csv"), "utf8"));
 
-console.log(`Mapped Hevy CSV -> ${records.length} OpenBody Session record(s).\n`);
+console.log(`Mapped Hevy CSV -> ${records.length} OpenBody Session record(s) (${warnings.length} warnings).\n`);
+for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
 console.log(`Session JSON (wire form):\n${JSON.stringify(records[0], null, 2)}\n`);
 
 let bad = 0;

@@ -9,9 +9,12 @@ import { normalizeDocument } from "../../src/normalize.js";
 import { validate } from "../../src/schema-loader-node.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const records = mapTheCrag(fs.readFileSync(path.join(here, "thecrag-sample.csv"), "utf8"));
+const { records, warnings } = mapTheCrag(fs.readFileSync(path.join(here, "thecrag-sample.csv"), "utf8"));
 
-console.log(`Mapped theCrag logbook CSV -> ${records.length} OpenBody Session record(s).\n`);
+console.log(
+  `Mapped theCrag logbook CSV -> ${records.length} OpenBody Session record(s) (${warnings.length} warnings).\n`,
+);
+for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
 console.log(`Session JSON (wire form):\n${JSON.stringify(records[0], null, 2)}\n`);
 
 let bad = 0;

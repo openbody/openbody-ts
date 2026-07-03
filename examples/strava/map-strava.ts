@@ -10,10 +10,11 @@ import { validate } from "../../src/validate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const input = JSON.parse(fs.readFileSync(path.join(here, "strava-sample.json"), "utf8"));
-const records = mapStrava(input);
+const { records, warnings } = mapStrava(input, { subject: "athlete-1" });
 const session = records[records.length - 1];
 
-console.log(`Mapped Strava activity -> ${records.length} OpenBody records.\n`);
+console.log(`Mapped Strava activity -> ${records.length} OpenBody records (${warnings.length} warnings).\n`);
+for (const w of warnings) console.log(`  warn ${w.code}: ${w.message}`);
 console.log(`Session (wire):\n${JSON.stringify(session, null, 2)}\n`);
 let bad = 0;
 for (const r of records) {
