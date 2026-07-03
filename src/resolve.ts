@@ -82,6 +82,8 @@ interface Indexes {
   canonicalIds: Set<string>;
   plain: Index; // norm() keys
   sorted: Index; // normSorted() keys
+  /** Per-app reverse index: canonical id → the app's own name (first alias in the table's stable curated order). */
+  reverse: Map<string, Map<string, string>>;
 }
 
 let indexes: Indexes | null = null;
@@ -103,17 +105,24 @@ function buildIndexes(): Indexes {
     canonicalIds: new Set(data.registry.map((e) => e.id)),
     plain: new Map(),
     sorted: new Map(),
+    reverse: new Map(),
   };
   // Registry entries: the id itself (dots/hyphens are punctuation → spaces) + every name.
   for (const entry of data.registry) {
     add(idx, entry.id, entry.id);
     for (const n of entry.names) add(idx, n, entry.id);
   }
-  // Every app alias table (nulls are curation work-list items, not index keys).
-  for (const table of Object.values(data.aliases)) {
+  // Every app alias table (nulls are curation work-list items, not index keys), plus the
+  // per-app reverse index for sourceNameForId (first alias per id wins — curated order).
+  for (const [source, table] of Object.entries(data.aliases)) {
+    const rev = new Map<string, string>();
     for (const [name, canonical] of Object.entries(table)) {
-      if (canonical != null) add(idx, name, canonical);
+      if (canonical != null) {
+        add(idx, name, canonical);
+        if (!rev.has(canonical)) rev.set(canonical, name);
+      }
     }
+    idx.reverse.set(source, rev);
   }
   return idx;
 }
@@ -162,13 +171,10 @@ export function resolveExerciseRef(name: string, opts: ResolveOptions = {}): Res
 /**
  * Reverse lookup for outbound mappers: the app's own name for a canonical id (first
  * alias in the app's table that maps to `id`, in the table's stable curated order).
- * Returns undefined when the app has no alias for that id.
+ * Returns undefined when the app has no alias for that id. Served from the lazily
+ * built reverse index — to-strong.ts calls this per exercise, so the previous
+ * O(table) scan per call was quadratic over an export.
  */
 export function sourceNameForId(id: string, source: string): string | undefined {
-  const table = data.aliases[source];
-  if (!table) return undefined;
-  for (const [name, canonical] of Object.entries(table)) {
-    if (canonical === id) return name;
-  }
-  return undefined;
+  return getIndexes().reverse.get(source)?.get(id);
 }
