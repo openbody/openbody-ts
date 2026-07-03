@@ -51,7 +51,8 @@
 //     no canonical registry id (the registry's `air-bike` is a fan bike, `cycling` a road
 //     ride), so it stays opaque-only. The raw Type string always rides in
 //     `exerciseRef.opaque` (§6.5 lossless floor).
-import { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { parseCsv, num, toRfc3339 } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
 function parseClock(s: string | undefined): number | undefined {
@@ -88,9 +89,10 @@ function inferPiece(desc: string, workSec: number | undefined, workDist: number 
   const d = desc.trim();
   const mDist = d.match(/^(\d+)x([\d,]+)m(?:\/(\d+(?::\d+)*)r)?/);
   if (mDist) {
-    const n = Number(mDist[1]);
-    return { kind: "intervals", n, childScoring: "distance", childValue: Number(mDist[2].replace(/,/g, "")),
-      restSec: parseClock(mDist[3]) ?? (restSec && n ? restSec / n : undefined) };
+    const [, nStr = "", valStr = "", restStr] = mDist; // groups 1-2 always match; defaults only satisfy the checker
+    const n = Number(nStr);
+    return { kind: "intervals", n, childScoring: "distance", childValue: Number(valStr.replace(/,/g, "")),
+      restSec: parseClock(restStr) ?? (restSec && n ? restSec / n : undefined) };
   }
   const mTime = d.match(/^(\d+)x(\d+(?::\d+)+)(?:\/(\d+(?::\d+)*)r)?/);
   if (mTime) {
@@ -100,7 +102,7 @@ function inferPiece(desc: string, workSec: number | undefined, workDist: number 
   }
   if (/^v/.test(d)) return { kind: "variable" };
   const mFixedDist = d.match(/^([\d,]+)m\b/);
-  if (mFixedDist && Number(mFixedDist[1].replace(/,/g, "")) === workDist) return { kind: "single", scoring: "distance" };
+  if (mFixedDist && Number((mFixedDist[1] ?? "").replace(/,/g, "")) === workDist) return { kind: "single", scoring: "distance" };
   const mFixedTime = d.match(/^(\d+(?::\d+)+)\b/);
   if (mFixedTime && parseClock(mFixedTime[1]) === workSec) return { kind: "single", scoring: "time" };
   return { kind: "single", scoring: "continuous" }; // a "just row" ends wherever it ends
@@ -131,7 +133,7 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     const totalCal = num(r["Total Cal"]);
     const piece = inferPiece(r["Description"] ?? "", workSec, workDist, restSec);
 
-    const start = toRfc3339(r["Date"], opts.utcOffset); // Date is offset-less local wall-clock
+    const start = toRfc3339(r["Date"] ?? "", opts.utcOffset); // Date is offset-less local wall-clock
     const elapsed = (workSec ?? 0) + (restSec ?? 0);
     // Wall-clock + elapsed arithmetic on a fixed UTC anchor (a constant offset cancels in
     // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
@@ -185,7 +187,9 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
       session.blocks = [{ id: `${sid}-blk`, recordType: "Block", ...(r["Description"] ? { name: r["Description"] } : {}), children }];
     } else {
       const perf: OpenBodyRecord = {};
-      const scoring = piece.kind === "variable" ? "continuous" : piece.scoring!;
+      // A "single" piece always carries a scoring from inferPiece; "continuous" is the
+      // honest degradation for any shape that somehow reaches here without one.
+      const scoring = piece.kind === "variable" ? "continuous" : piece.scoring ?? "continuous";
       if (scoring === "distance") perf.distance = { absolute: { value: workDist, unit: "m" } };
       else if (scoring === "time") perf.time = { absolute: { value: workSec, unit: "s" } };
       else {

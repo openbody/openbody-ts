@@ -6,7 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate } from "../src/schema-loader-node.js";
 import { normalizeDocument, equivalent } from "../src/normalize.js";
-import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong, parseCsv } from "../src/mappers/index.js";
+import { mapHevy, mapStrong, mapStrava, mapAppleHealth, mapFit, mapOpenBodyToStrong } from "../src/mappers/index.js";
+import { parseCsv } from "../src/mappers/csv.js";
 
 const ex = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../examples");
 const read = (p: string) => fs.readFileSync(path.join(ex, p), "utf8");
@@ -56,7 +57,7 @@ let total = cases.length;
   }
   if (!equivalent(original, roundTripped)) errs.push("outbound round-trip (Strong → OpenBody → Strong → OpenBody) not equivalent");
   // The duration-scored Plank row must survive: Seconds column carries the hold time.
-  const plank = parseCsv(out.csv).find((r) => r["Exercise Name"] === "Plank");
+  const plank = parseCsv(out.csv).find((r: Record<string, string>) => r["Exercise Name"] === "Plank");
   if (plank?.Seconds !== "60") errs.push(`Plank duration set: expected Seconds=60, got ${JSON.stringify(plank)}`);
 
   if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
@@ -241,7 +242,7 @@ let total = cases.length;
 
   // Hevy → OpenBody → Strong CSV: the emitted Exercise Name column is Hevy's original.
   const outCsv = mapOpenBodyToStrong(hevyRecords).csv;
-  const outNames = new Set(parseCsv(outCsv).map((r) => r["Exercise Name"]));
+  const outNames = new Set(parseCsv(outCsv).map((r: Record<string, string>) => r["Exercise Name"]));
   for (const orig of Object.keys(expect)) {
     if (!outNames.has(orig)) errs.push(`hevy→strong CSV dropped/renamed "${orig}" (got: ${[...outNames].join(" | ")})`);
   }

@@ -60,7 +60,7 @@ check("normalizeDocument preserves exact quantity through canonical bytes", () =
     "asOf": "2026-01-01T00:00:00Z",
     "quantity": 80.123456789012345678
   }`);
-  const [bytes] = normalizeDocument(doc as any);
+  const [bytes = ""] = normalizeDocument(doc as any);
   assert.ok(bytes.includes('"coefficient":"80123456789012345678"'), bytes);
   assert.ok(bytes.includes('"exponent":"-18"'), bytes);
 });

@@ -40,7 +40,7 @@
 //
 // `{ strict: true }` inverts the policy for programmatic users who prefer failure to loss:
 // the first would-be omission throws instead.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 import { sourceNameForId } from "../resolve.js";
 import { LosslessNumber } from "../parse.js";
 import { canonNumber, isFixedPointLike } from "../canonical.js";

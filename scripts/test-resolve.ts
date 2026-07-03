@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate } from "../src/schema-loader-node.js";
 import { resolveExerciseRef, sourceNameForId } from "../src/resolve.js";
-import { parseCsv } from "../src/mappers/index.js";
+import { parseCsv } from "../src/mappers/csv.js";
 
 const ex = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../examples");
 const read = (p: string) => fs.readFileSync(path.join(ex, p), "utf8");
@@ -101,7 +101,7 @@ for (const [label, ref] of [
     ["hevy", "hevy/hevy-sample.csv", "exercise_title"],
     ["strong", "strong/strong-sample.csv", "Exercise Name"],
   ] as const) {
-    const names = [...new Set(parseCsv(read(file)).map((r) => r[col]))];
+    const names = [...new Set(parseCsv(read(file)).map((r: Record<string, string>) => r[col] ?? ""))];
     const missing = names.filter((n) => !(n in xwalk.aliases[app]));
     const resolved = names.filter((n) => resolveExerciseRef(n, { source: app }).id !== undefined);
     check(`${app} example: all ${names.length} names curated in alias table (${resolved.length} resolve to canonical ids)`,

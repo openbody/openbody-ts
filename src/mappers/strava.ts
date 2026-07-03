@@ -1,6 +1,6 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 export interface StravaInput { activity: Record<string, any>; streams: Record<string, any> }
 

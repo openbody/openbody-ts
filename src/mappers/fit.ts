@@ -16,7 +16,7 @@
 // with a decoder of their choice (e.g. `fit-file-parser`, MIT) and hands over the resulting
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 interface DecodedRecord { timestamp: string; position_lat?: number; position_long?: number; altitude?: number; heart_rate?: number; power?: number; cadence?: number; }
 interface DecodedLap { timestamp: string; start_time?: string; total_elapsed_time?: number; total_distance?: number; total_calories?: number; }
@@ -117,7 +117,10 @@ function mapWorkout(data: FitInput, subject: string): OpenBodyRecord[] {
       const startIdx = step.duration_value ?? idx;
       const rounds = step.target_value ?? 1;
       const group: OpenBodyRecord[] = [];
-      while (entries.length && entries[entries.length - 1].minIdx >= startIdx) group.unshift(entries.pop()!.record);
+      for (let last = entries.at(-1); last !== undefined && last.minIdx >= startIdx; last = entries.at(-1)) {
+        entries.pop();
+        group.unshift(last.record);
+      }
       entries.push({ record: { id: `fit-wkt-blk-${idx}`, recordType: "Block", repetitions: rounds, children: group }, minIdx: startIdx });
     } else {
       // WorkUnit has no `name` field — a step's name is structural (§5.3), so it lives on
@@ -141,8 +144,11 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   const s = data.sessions?.[0];
   const records = data.records ?? [];
   const start = s?.start_time ?? records[0]?.timestamp;
-  const end = s ? new Date(new Date(start).getTime() + (s.total_elapsed_time ?? 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : records[records.length - 1]?.timestamp;
-  const offsets = records.map((r) => (new Date(r.timestamp).getTime() - new Date(start).getTime()) / 1000);
+  // `start` is defined on every path that reads it: `s` guarantees start_time, and the
+  // offsets map only runs over records that exist (records[0] then supplied `start`).
+  const t0 = start !== undefined ? new Date(start).getTime() : NaN;
+  const end = s ? new Date(t0 + (s.total_elapsed_time ?? 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : records[records.length - 1]?.timestamp;
+  const offsets = records.map((r) => (new Date(r.timestamp).getTime() - t0) / 1000);
   const prov = (method: string) => ({ method, sourceApp: "fit" });
 
   const out: OpenBodyRecord[] = [];

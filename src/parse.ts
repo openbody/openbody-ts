@@ -75,18 +75,20 @@ export function parseLossless(text: string): unknown {
     return fail("unterminated string");
   };
 
+  const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" && c <= "9";
+
   const parseNumber = (): LosslessNumber => {
     const start = i;
     if (text[i] === "-") i++;
-    while (i < n && text[i] >= "0" && text[i] <= "9") i++;
+    while (isDigit(text[i])) i++;
     if (text[i] === ".") {
       i++;
-      while (i < n && text[i] >= "0" && text[i] <= "9") i++;
+      while (isDigit(text[i])) i++;
     }
     if (text[i] === "e" || text[i] === "E") {
       i++;
       if (text[i] === "+" || text[i] === "-") i++;
-      while (i < n && text[i] >= "0" && text[i] <= "9") i++;
+      while (isDigit(text[i])) i++;
     }
     return new LosslessNumber(text.slice(start, i));
   };
@@ -97,7 +99,7 @@ export function parseLossless(text: string): unknown {
     if (c === "{") return parseObject();
     if (c === "[") return parseArray();
     if (c === '"') return parseString();
-    if (c === "-" || (c >= "0" && c <= "9")) return parseNumber();
+    if (c === "-" || isDigit(c)) return parseNumber();
     if (text.startsWith("true", i)) { i += 4; return true; }
     if (text.startsWith("false", i)) { i += 5; return false; }
     if (text.startsWith("null", i)) { i += 4; return null; }

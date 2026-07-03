@@ -53,7 +53,8 @@
 //   - blank/unknown ⇒ opaque-only
 //   The raw gear style always rides in `exerciseRef.opaque` (§6.5 lossless floor);
 //   `Ascent Gear Style` (as climbed) wins over `Route Gear Style`.
-import { parseCsv, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { parseCsv, toRfc3339 } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
 const CLEAN = new Set([
@@ -104,6 +105,7 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[]
     sIdx++;
     const sid = `thecrag-sess-${sIdx}`;
     const f = srows[0];
+    if (f === undefined) continue; // unreachable: groups are created non-empty
 
     const disciplines: string[] = [];
     for (const r of srows) {

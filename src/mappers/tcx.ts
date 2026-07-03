@@ -44,7 +44,7 @@
 //   workout shape; use mapFit for a decoded workout). A file containing only those
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 // ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
 const NAME = "[A-Za-z_][\\w.-]*";
@@ -113,13 +113,16 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     }
 
     // ---- Pillar A: trackpoint streams (timed points only — offsets need timestamps) ----
-    const timed = tps.filter((t) => t.time);
+    // Truthiness match with the original `t.time` filter ("" is untimed), and the type
+    // predicate lets everything downstream read `time` without non-null assertions.
+    const timed = tps.filter((t): t is Tp & { time: string } => !!t.time);
     const measuredBy: OpenBodyRecord[] = [];
     let mStart: string | undefined, mEnd: string | undefined;
-    if (timed.length) {
-      mStart = timed[0].time!; mEnd = timed[timed.length - 1].time!;
+    const firstTimed = timed[0];
+    if (firstTimed !== undefined) {
+      mStart = firstTimed.time; mEnd = (timed[timed.length - 1] ?? firstTimed).time;
       const t0 = Date.parse(mStart);
-      const offsets = timed.map((t) => (Date.parse(t.time!) - t0) / 1000);
+      const offsets = timed.map((t) => (Date.parse(t.time) - t0) / 1000);
       if (timed.some((t) => t.lat != null)) {
         records.push({
           id: `${base}-route`, recordType: "Measurement", subject, type: "location",

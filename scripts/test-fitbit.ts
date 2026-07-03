@@ -46,7 +46,7 @@ const records = mapFitbitTakeout(files, { utcOffset: "-08:00" });
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
   if (stages.length !== 7) errs.push(`expected 7 stage intervals (5 data + deep split by 1 short wake), got ${stages.length}`);
   for (let i = 0; i < stages.length - 1; i++)
-    if (stages[i].endTime !== stages[i + 1].startTime) errs.push(`gap/overlap: ${stages[i].id} ends ${stages[i].endTime}, ${stages[i + 1].id} starts ${stages[i + 1].startTime}`);
+    if (stages[i]?.endTime !== stages[i + 1]?.startTime) errs.push(`gap/overlap: ${stages[i]?.id} ends ${stages[i]?.endTime}, ${stages[i + 1]?.id} starts ${stages[i + 1]?.startTime}`);
   const seq = stages.map((s) => s.category).join(",");
   if (seq !== "awake,light,deep,awake,deep,rem,light") errs.push(`stage sequence: ${seq}`);
   for (const s of stages) {
@@ -115,24 +115,24 @@ const records = mapFitbitTakeout(files, { utcOffset: "-08:00" });
   const hr = records.filter((r) => r.type === "heart_rate" && r.sampleArray);
   if (hr.length !== 1) errs.push(`expected 1 HR day-series, got ${hr.length}`);
   else {
-    const sa = hr[0].sampleArray;
+    const sa = hr[0]?.sampleArray;
     if (sa.offsets.length !== 10 || sa.dataPoints.length !== 10) errs.push(`HR lengths: ${sa.offsets.length}/${sa.dataPoints.length}`);
     if (sa.offsets[0] !== 0 || sa.offsets[9] !== 105) errs.push(`HR offsets: ${sa.offsets[0]}..${sa.offsets[9]} (want 0..105)`);
-    if (hr[0].unit !== "/min" || sa.dataPoints[0] !== 76) errs.push(`HR series: unit=${hr[0].unit}, first=${sa.dataPoints[0]}`);
-    if (!hr[0].startTime.endsWith("Z")) errs.push(`HR timestamps are documented UTC; startTime=${hr[0].startTime}`);
-    if (hr[0].endTime !== "2024-01-06T07:01:46Z") errs.push(`HR endTime: ${hr[0].endTime}`);
+    if (hr[0]?.unit !== "/min" || sa.dataPoints[0] !== 76) errs.push(`HR series: unit=${hr[0]?.unit}, first=${sa.dataPoints[0]}`);
+    if (!hr[0]?.startTime.endsWith("Z")) errs.push(`HR timestamps are documented UTC; startTime=${hr[0]?.startTime}`);
+    if (hr[0]?.endTime !== "2024-01-06T07:01:46Z") errs.push(`HR endTime: ${hr[0]?.endTime}`);
   }
   const st = records.filter((r) => r.type === "step_count" && r.sampleArray);
   if (st.length !== 1) errs.push(`expected 1 steps day-series, got ${st.length}`);
   else {
-    const sa = st[0].sampleArray;
+    const sa = st[0]?.sampleArray;
     if (sa.dataPoints.length !== 8 || sa.dataPoints[2] !== 64) errs.push(`steps dataPoints: ${JSON.stringify(sa.dataPoints)}`);
     if (sa.offsets[7] !== 660) errs.push(`steps last offset: ${sa.offsets[7]} (want 660 — 11 min, incl. the bucket gap)`);
-    if (!st[0].startTime.endsWith("-08:00")) errs.push(`steps are local time; startTime=${st[0].startTime}`);
+    if (!st[0]?.startTime.endsWith("-08:00")) errs.push(`steps are local time; startTime=${st[0]?.startTime}`);
   }
   const rhr = records.filter((r) => r.type === "resting_heart_rate");
   if (rhr.length !== 1) errs.push(`zero-value RHR day must be skipped: got ${rhr.length}`);
-  else if (rhr[0].startTime !== "2024-01-06T00:00:00-08:00" || rhr[0].endTime !== "2024-01-07T00:00:00-08:00") errs.push(`RHR window: ${rhr[0].startTime}..${rhr[0].endTime}`);
+  else if (rhr[0]?.startTime !== "2024-01-06T00:00:00-08:00" || rhr[0]?.endTime !== "2024-01-07T00:00:00-08:00") errs.push(`RHR window: ${rhr[0]?.startTime}..${rhr[0]?.endTime}`);
   check("intraday series + RHR", errs, "1 HR + 1 steps sampleArray per day (HR in UTC, steps local); RHR daily interval, zero-day skipped");
 }
 

@@ -1,5 +1,6 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
-import { parseCsv, num, toRfc3339, contentHash, type OpenBodyRecord, type MapOptions } from "./csv.js";
+import { parseCsv, num, toRfc3339, contentHash } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 import { resolveExerciseRef } from "../resolve.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
@@ -18,6 +19,7 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const records: OpenBodyRecord[] = [];
   for (const [key, srows] of sessions) {
     const f = srows[0];
+    if (f === undefined) continue; // unreachable: groups are created non-empty
     const hasSuperset = srows.some((r) => r.superset_id !== "");
     const session: OpenBodyRecord = {
       // The export has no workout id of its own, so the natural key (title|start_time) is
@@ -26,21 +28,22 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
       id: `hevy-sess-${contentHash(key)}`, recordType: "Session", subject, clientRecordId: key,
       name: f.title,
       ...(f.description ? { notes: f.description } : {}),
-      disciplines: ["strength"], startTime: toRfc3339(f.start_time, opts.utcOffset), endTime: toRfc3339(f.end_time, opts.utcOffset),
+      disciplines: ["strength"], startTime: toRfc3339(f.start_time ?? "", opts.utcOffset), endTime: toRfc3339(f.end_time ?? "", opts.utcOffset),
     };
-    const exGroups: { title: string; superset: string; sets: Record<string, string>[] }[] = [];
+    const exGroups: { title: string | undefined; superset: string | undefined; sets: Record<string, string>[] }[] = [];
     for (const r of srows) {
       const last = exGroups[exGroups.length - 1];
       if (last && last.title === r.exercise_title && last.superset === r.superset_id) last.sets.push(r);
       else exGroups.push({ title: r.exercise_title, superset: r.superset_id, sets: [r] });
     }
     const makeExercise = (g: typeof exGroups[number], idx: number) => {
-      const assisted = /assisted/i.test(g.title);
+      const title = g.title ?? "";
+      const assisted = /assisted/i.test(title);
       const workUnits = g.sets.map((s, j) => {
         const wu: OpenBodyRecord = {
           id: `${session.id}-ex${idx}-set${j}`, recordType: "WorkUnit",
           scoring: num(s.reps) != null ? "reps" : num(s.distance_km) != null ? "distance" : "time",
-          setRole: SET_ROLE[s.set_type] ?? s.set_type,
+          setRole: SET_ROLE[s.set_type ?? ""] ?? s.set_type,
         };
         const perf: OpenBodyRecord = {};
         if (num(s.reps) != null) perf.reps = num(s.reps);
@@ -53,7 +56,7 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
       });
       // §6.5 ladder via the registry crosswalk: canonical id where one resolves, with the
       // original Hevy name preserved losslessly in `opaque` (see src/resolve.ts).
-      return { id: `${session.id}-ex${idx}`, recordType: "Exercise", exerciseRef: resolveExerciseRef(g.title, { source: "hevy" }), workUnits };
+      return { id: `${session.id}-ex${idx}`, recordType: "Exercise", exerciseRef: resolveExerciseRef(title, { source: "hevy" }), workUnits };
     };
     if (hasSuperset) {
       // §5.3 at-most-one container: any superset ⇒ everything goes under blocks[].

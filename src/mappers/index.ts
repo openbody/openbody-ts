@@ -16,4 +16,5 @@ export { mapTheCrag } from "./thecrag.js";
 // { csv, omissions } — SPEC §10's directional-lossless rule: emitting into a less-expressive
 // target is best-effort, and every material loss is reported (or throws with { strict: true }).
 export { mapOpenBodyToStrong, type ToStrongOptions, type ToStrongResult, type StrongOmission } from "./to-strong.js";
-export { parseCsv, num, toRfc3339, type OpenBodyRecord, type MapOptions } from "./csv.js";
+// Internal plumbing (parseCsv/num/toRfc3339/contentHash) stays in ./csv.js — import it
+// directly within this repo; it is deliberately not part of the public barrel.

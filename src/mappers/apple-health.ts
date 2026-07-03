@@ -1,7 +1,7 @@
 // Apple Health export.xml → OpenBody Measurements (discrete/interval quantity, sleep
 // category series) + HKWorkout → Session. Health Connect maps identically (documented
 // parity); this mapper covers both shapes.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 const attrs = (el: string) => Object.fromEntries([...el.matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 const rfc = (s: string) => s.replace(" ", "T").replace(/ \+0000$/, "Z").replace(/ ([+-]\d\d)(\d\d)$/, "$1:$2");
@@ -23,7 +23,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
   let i = 0;
 
   for (const m of xml.matchAll(/<Record\b([^>]*?)\/?>/g)) {
-    const a = attrs(m[1]); i++;
+    const a = attrs(m[1] ?? ""); i++; // group 1 always captures (possibly ""); ?? only satisfies the checker
     const prov = { method: "sensor", sourceApp: "apple", device: { manufacturer: "apple", model: a.sourceName } };
     if (a.type?.startsWith("HKQuantityTypeIdentifier")) {
       const id = "apple-q-" + i;
@@ -40,7 +40,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
   }
 
   for (const m of xml.matchAll(/<Workout\b([^>]*?)\/?>/g)) {
-    const a = attrs(m[1]); i++;
+    const a = attrs(m[1] ?? ""); i++; // group 1 always captures (possibly ""); ?? only satisfies the checker
     const start = rfc(a.startDate), end = rfc(a.endDate);
     const durSec = a.durationUnit === "min" ? Number(a.duration) * 60 : Number(a.duration);
     const perf: OpenBodyRecord = {};

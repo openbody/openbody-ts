@@ -110,14 +110,14 @@ function orderSetArrays(value: Json): Json {
     const out: Record<string, Json> = {};
     for (const [k, v] of Object.entries(value)) {
       let nv = orderSetArrays(v as Json);
+      const keys = SET_ARRAY_KEYS[k];
       if (Array.isArray(nv) && SET_ARRAY_SCALARS.has(k)) {
         nv = [...nv].sort((a, b) => {
           const as = String(a);
           const bs = String(b);
           return as < bs ? -1 : as > bs ? 1 : 0;
         });
-      } else if (Array.isArray(nv) && k in SET_ARRAY_KEYS) {
-        const keys = SET_ARRAY_KEYS[k];
+      } else if (Array.isArray(nv) && keys !== undefined) {
         nv = [...nv].sort((a, b) => {
           for (const kk of keys) {
             const av = String((a as any)?.[kk] ?? "");

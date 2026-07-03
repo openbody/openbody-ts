@@ -1,4 +1,6 @@
-// Minimal quoted-CSV parser shared by the CSV-based mappers (Hevy, Strong).
+// Internal mapper plumbing (quoted-CSV parsing, number/timestamp helpers, content
+// hashing) shared by the CSV-based mappers. Deliberately NOT re-exported from the
+// package entry (src/index.ts) — these are implementation details, not public API.
 export function parseCsv(text: string, delim = ","): Record<string, string>[] {
   const rows: string[][] = [];
   let row: string[] = [], cell = "", q = false;
@@ -48,14 +50,12 @@ export function toRfc3339(s: string, utcOffset = "Z"): string {
   let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(t);
   if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}${utcOffset}`;
   m = /^(\d{1,2}) ([A-Za-z]{3,}) (\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
-  const mon = m && MONTH[m[2].slice(0, 3).toLowerCase()];
-  if (m && mon) return `${m[3]}-${mon}-${m[1].padStart(2, "0")}T${m[4].padStart(2, "0")}:${m[5]}:${m[6] ?? "00"}${utcOffset}`;
+  if (m) {
+    const [, day, monName, year, hh, mm, ss] = m;
+    const mon = monName !== undefined ? MONTH[monName.slice(0, 3).toLowerCase()] : undefined;
+    if (day !== undefined && year !== undefined && hh !== undefined && mm !== undefined && mon !== undefined) {
+      return `${year}-${mon}-${day.padStart(2, "0")}T${hh.padStart(2, "0")}:${mm}:${ss ?? "00"}${utcOffset}`;
+    }
+  }
   return t;
-}
-
-export type OpenBodyRecord = Record<string, any>;
-export interface MapOptions {
-  subject?: string;
-  /** RFC 3339 offset (e.g. "-07:00") stamped onto the source's offset-less local wall-clock timestamps. Default "Z". */
-  utcOffset?: string;
 }

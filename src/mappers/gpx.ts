@@ -38,7 +38,7 @@
 // - The <gpx creator="…"> attribute is free-form vendor text, not a registry token,
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 // ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
 const NAME = "[A-Za-z_][\\w.-]*";
@@ -101,8 +101,11 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const prov = { method: "sensor", sourceApp: "gpx" };
   const discipline = disciplineFor(trkType);
 
-  const timed = pts.filter((p) => p.time);
-  if (timed.length === 0) {
+  // Truthiness match with the original `p.time` filter ("" is untimed), and the type
+  // predicate lets everything downstream read `time` without non-null assertions.
+  const timed = pts.filter((p): p is Pt & { time: string } => !!p.time);
+  const firstTimed = timed[0];
+  if (firstTimed === undefined) {
     // Untimed track: no offsets are representable (§4.3) — Session only, geometry kept losslessly.
     gpxExt.untimedTrack = { channels: ["lat", "lon", "alt"], points: pts.map((p) => [p.lat, p.lon, p.ele ?? null]) };
     return [{
@@ -114,9 +117,9 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   }
   if (timed.length < pts.length) gpxExt.droppedUntimedPoints = pts.length - timed.length;
 
-  const start = timed[0].time!, end = timed[timed.length - 1].time!;
+  const start = firstTimed.time, end = (timed[timed.length - 1] ?? firstTimed).time;
   const t0 = Date.parse(start);
-  const offsets = timed.map((p) => (Date.parse(p.time!) - t0) / 1000);
+  const offsets = timed.map((p) => (Date.parse(p.time) - t0) / 1000);
 
   const records: OpenBodyRecord[] = [];
   const measuredBy: OpenBodyRecord[] = [];

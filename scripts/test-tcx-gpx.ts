@@ -71,11 +71,11 @@ check("gpx timed track", `${gpx.length} wire records validate; 2 trkseg concaten
 const untimed = mapGpx(read("gpx/gpx-no-time-sample.gpx"));
 check("gpx untimed track", "1 Session, no Measurements; geometry preserved in extension.gpx.untimedTrack", (errs) => {
   validateAll(untimed, errs);
-  if (untimed.length !== 1 || untimed[0].recordType !== "Session") errs.push(`expected exactly 1 Session, got ${j(untimed.map((r) => r.recordType))}`);
+  if (untimed.length !== 1 || untimed[0]?.recordType !== "Session") errs.push(`expected exactly 1 Session, got ${j(untimed.map((r) => r.recordType))}`);
   const s = untimed[0];
-  if (s.startTime !== undefined || s.endTime !== undefined) errs.push("untimed session must not fabricate start/end times");
-  if (j(s.disciplines) !== j(["hiking"])) errs.push(`disciplines: ${j(s.disciplines)}`);
-  const track = s.extension?.gpx?.untimedTrack;
+  if (s?.startTime !== undefined || s?.endTime !== undefined) errs.push("untimed session must not fabricate start/end times");
+  if (j(s?.disciplines) !== j(["hiking"])) errs.push(`disciplines: ${j(s?.disciplines)}`);
+  const track = s?.extension?.gpx?.untimedTrack;
   if (track?.points?.length !== 3 || j(track?.points?.[0]) !== j([46.5784, 8.00654, 1932])) errs.push(`untimedTrack residue: ${j(track)}`);
 });
 

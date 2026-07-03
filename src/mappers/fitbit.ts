@@ -36,7 +36,7 @@
 // UTC (mapped with "Z"); everything else is local wall-clock time — pass opts.utcOffset
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
-import { type OpenBodyRecord, type MapOptions } from "./csv.js";
+import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 export interface FitbitFile { name: string; text: string }
 export interface FitbitMapOptions extends MapOptions {
@@ -100,15 +100,19 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
     const byDay = new Map<string, typeof entries>();
     for (const en of entries.sort((a, b) => a.e - b.e)) {
       const day = isoAt(en.e).slice(0, 10);
-      (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(en);
+      let bucket = byDay.get(day);
+      if (bucket === undefined) byDay.set(day, (bucket = []));
+      bucket.push(en);
     }
     for (const [day, ens] of byDay) {
-      const t0 = ens[0].e;
+      const first = ens[0];
+      if (first === undefined) continue; // unreachable: buckets are created non-empty
+      const last = ens[ens.length - 1] ?? first;
       records.push({
         id: `fitbit-${kind === "steps" ? "steps" : "hr"}-${day}`, recordType: "Measurement", subject,
         type: kind === "steps" ? "step_count" : "heart_rate", unit: kind === "steps" ? "1" : "/min",
-        sampleArray: { offsets: ens.map((x) => (x.e - t0) / 1000), dataPoints: ens.map((x) => x.v) },
-        startTime: ens[0].iso + tzOff, endTime: ens[ens.length - 1].iso + tzOff, provenance: prov("sensor"),
+        sampleArray: { offsets: ens.map((x) => (x.e - first.e) / 1000), dataPoints: ens.map((x) => x.v) },
+        startTime: first.iso + tzOff, endTime: last.iso + tzOff, provenance: prov("sensor"),
       });
     }
   };
