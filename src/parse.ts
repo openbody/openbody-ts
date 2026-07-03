@@ -68,6 +68,9 @@ export function parseLossless(text: string): unknown {
           default:
             fail(`invalid escape \\${e}`);
         }
+      } else if (c !== undefined && c.charCodeAt(0) <= 0x1f) {
+        // RFC 8259 §7: control characters (U+0000–U+001F) MUST be escaped in strings.
+        fail(`unescaped control character U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")} in string`);
       } else {
         s += c;
       }
@@ -76,6 +79,11 @@ export function parseLossless(text: string): unknown {
   };
 
   const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" && c <= "9";
+
+  // RFC 8259 §6 number grammar: an optional minus, an int part with no leading zero,
+  // an optional non-empty fraction, an optional non-empty exponent. The lexer below is
+  // permissive (it just consumes number-ish characters); this anchors what it took.
+  const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
 
   const parseNumber = (): LosslessNumber => {
     const start = i;
@@ -90,7 +98,11 @@ export function parseLossless(text: string): unknown {
       if (text[i] === "+" || text[i] === "-") i++;
       while (isDigit(text[i])) i++;
     }
-    return new LosslessNumber(text.slice(start, i));
+    const token = text.slice(start, i);
+    // Reject what JSON.parse rejects: "-", "1.", "01", "1e", "1e+", … — accepting them
+    // would put non-JSON number spellings on the lossless path.
+    if (!NUMBER.test(token)) fail(`invalid number ${JSON.stringify(token)}`);
+    return new LosslessNumber(token);
   };
 
   const parseValue = (): unknown => {

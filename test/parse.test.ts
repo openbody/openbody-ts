@@ -41,6 +41,46 @@ describe("parseLossless accepts valid JSON", () => {
   });
 });
 
+// C5: the lexer used to ACCEPT non-JSON number spellings ("-", "1.", "01", "1e") and
+// unescaped control characters in strings; both are now rejected (RFC 8259 §6/§7).
+describe("parseLossless rejects invalid number tokens (RFC 8259 §6)", () => {
+  const badNumbers = ["-", "1.", "01", "1e", "-01", "00", "1e+", "1.e3", "-.5", "1E-", "0.e1"];
+  it.each(badNumbers)("rejects %j", (t) => {
+    expect(() => parseLossless(t)).toThrow(/invalid number/);
+    expect(() => JSON.parse(t)).toThrow(); // parity: JSON.parse rejects these too
+  });
+  it("rejects them nested inside documents", () => {
+    expect(() => parseLossless('{"a": 01}')).toThrow(/invalid number/);
+    expect(() => parseLossless("[1., 2]")).toThrow(/invalid number/);
+    expect(() => parseLossless('{"a": [3, 1e]}')).toThrow(/invalid number/);
+  });
+  it("still accepts every valid number spelling", () => {
+    for (const t of ["0", "-0", "10", "0.5", "0.0", "1e0", "1E+3", "1e-3", "123.456e-7", "-9007199254740993"]) {
+      const v = parseLossless(t) as LosslessNumber;
+      expect(v.value, t).toBe(t);
+    }
+  });
+});
+
+describe("parseLossless rejects unescaped control characters in strings (RFC 8259 \u00a77)", () => {
+  it.each([
+    ["\u0000", "NUL"],
+    ["\n", "newline"],
+    ["\r", "carriage return"],
+    ["\t", "tab"],
+    ["\u001f", "unit separator"],
+  ])("rejects a raw control char (%s)", (ch) => {
+    expect(() => parseLossless(`"a${ch}b"`)).toThrow(/unescaped control character/);
+    expect(() => JSON.parse(`"a${ch}b"`)).toThrow(); // parity with JSON.parse
+  });
+  it("accepts the same characters when escaped", () => {
+    expect(parseLossless('"a\\nb\\tc\\u0000d"')).toBe("a\nb\tc\u0000d");
+  });
+  it("accepts U+0020 and above unescaped", () => {
+    expect(parseLossless('" ~\u00e9\ud83d\ude00"')).toBe(" ~\u00e9\ud83d\ude00");
+  });
+});
+
 describe("parseLossless rejects malformed JSON", () => {
   const bad = [
     ["", "empty input"],
