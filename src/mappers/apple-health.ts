@@ -29,7 +29,26 @@ const DISC: Record<string, string> = {
 const qtyFor = makeDisciplineMapper(QTY, "apple");
 const discFor = makeDisciplineMapper(DISC, "apple");
 
-/** Map an Apple Health export.xml string to OpenBody wire records. */
+/**
+ * Map an Apple Health `export.xml` string (Android Health Connect maps identically —
+ * see the file header) to OpenBody wire records: `<Record>` quantity types → discrete/
+ * interval quantity Measurements, `HKCategoryTypeIdentifierSleepAnalysis` → adjacent
+ * `sleep_stage` category Measurements (§4.3), `<Workout>` → a Session + continuous
+ * WorkUnit, with in-window HR Measurements linked via `measuredBy`.
+ *
+ * Input precondition: the XML must contain a `<HealthData>` root — anything else
+ * throws {@link MapperInputError} (`mapper: "apple-health"`). A structurally valid
+ * export with no `<Record>`/`<Workout>` elements returns an empty result, not an
+ * error.
+ *
+ * `opts.utcOffset` is not applicable: Apple Health's `startDate`/`endDate` attributes
+ * already carry an offset (parsed via the file's local `rfc()` helper).
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `skipped-record` (a `<Record>`/`<Workout>` missing a required attribute — value/
+ * startDate/endDate), `unmapped-record-types` (a `<Record>` type this mapper has no
+ * encoding for, dropped and counted).
+ */
 export function mapAppleHealth(xml: string, opts: MapOptions = {}): MapperResult {
   // Structural minimum (WP7): a <HealthData> root. Without it this isn't an Apple
   // Health export.xml (or a Health Connect export); a valid export with no

@@ -329,7 +329,27 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
   return out;
 }
 
-/** Map a decoded FIT activity or workout file to OpenBody wire records (see file header for the decode-input contract). */
+/**
+ * Map a *decoded* FIT activity or structured workout to OpenBody wire records: an
+ * activity (`sessions`/`laps`/`records` messages) → Pillar A `sampleArray`
+ * Measurements + a performed Session; a workout (`workouts`/`workout_steps`
+ * messages) → a planned Session of Block/WorkUnit prescriptions.
+ *
+ * Input precondition: this mapper never decodes FIT's binary format itself (see the
+ * file header for why) — `input` must be the message-list shape a FIT SDK decoder
+ * produces in `mode: "list"`, carrying at least one of `sessions`/`laps`/`records`/
+ * `workouts`/`workout_steps`. An input with none of those arrays throws
+ * {@link MapperInputError} (`mapper: "fit"`).
+ *
+ * `opts.utcOffset` is not applicable: decoded FIT timestamps are already absolute
+ * instants (the FIT SDK resolves them from the binary's compressed-timestamp
+ * encoding).
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `extra-sessions-dropped` / `extra-workouts-dropped` (multiple session/workout
+ * messages present — only the first is mapped), `laps-dropped` (lap messages present
+ * but per-lap splits are not mapped; session totals still cover the recording).
+ */
 export function mapFit(input: FitInput, opts: MapOptions = {}): MapperResult {
   // Structural minimum (WP7): the decoded message-list shape. A decode with NONE of
   // the message lists present isn't the documented `mode: "list"` output of any FIT

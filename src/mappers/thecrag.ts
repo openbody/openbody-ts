@@ -126,7 +126,24 @@ function outcomeFor(ascentType: string): Outcome | undefined {
   return undefined; // Mark / unknown: not an ascent result — raw type preserved in extension
 }
 
-/** Map a theCrag logbook CSV export to OpenBody wire records (one Session per date+crag). */
+/**
+ * Map a theCrag logbook CSV export to OpenBody wire records: ascents grouped into
+ * one Session per calendar date + crag, each ascent a `reps`-scored WorkUnit
+ * carrying a grade `modifiers` token and a send/attempt `outcome` per the canonical
+ * §5.18 corpus encoding (see the file header for the full Ascent Type → outcome
+ * table and the gear-style → `exerciseRef` rules).
+ *
+ * Input precondition: the CSV's header row must carry `Route Name` and `Ascent Type`
+ * columns — anything else throws `MapperInputError` (`mapper: "thecrag"`). Date
+ * columns are **not** required: a dateless logbook degrades to undated Sessions
+ * rather than throwing.
+ *
+ * `opts.utcOffset` stamps `Ascent Date` values that are date-only or otherwise
+ * offset-less (default `"Z"`); values that already carry an RFC 3339 offset pass
+ * through unchanged.
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ */
 export function mapTheCrag(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "thecrag");

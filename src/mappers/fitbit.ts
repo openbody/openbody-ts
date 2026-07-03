@@ -118,7 +118,32 @@ const fixed = (n: number): number | { coefficient: number; exponent: number } =>
 
 const basename = (name: string) => name.split("/").pop() ?? name;
 
-/** Map any subset of a Google Takeout Fitbit folder ({ name, text } JSON files) to OpenBody wire records. */
+/**
+ * Map any subset of a Google Takeout Fitbit folder — an array of `{ name, text }`
+ * JSON files, classified by basename regardless of directory — to OpenBody wire
+ * records: activity logs → Sessions, steps/heart-rate → per-day `sampleArray`
+ * series, sleep logs → adjacent sleep-stage category Measurements + duration
+ * summaries, weight logs → body-mass/BMI/body-fat Measurements, resting-heart-rate
+ * logs → daily Measurements. See the file header for the full file-kind table and
+ * sourcing.
+ *
+ * Input precondition: `files` must be an array of `{ name: string, text: string }`
+ * objects — anything else throws {@link MapperInputError} (`mapper: "fitbit"`). A
+ * recognized-kind file whose text isn't a valid JSON array degrades to a warning +
+ * skip, not a throw; only the top-level shape is a hard precondition.
+ *
+ * `opts.utcOffset` stamps every offset-less local-wall-clock timestamp (default
+ * `"Z"`) — **except** `heart_rate-*.json`, which is documented UTC and is always
+ * stamped `"Z"` regardless of this option.
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `skipped-file` (a recognized-kind file wasn't valid JSON, or wasn't a JSON array),
+ * `skipped-entries` (per-file count of entries missing id/timestamp/value — reported
+ * once per file), `unknown-distance-unit` (an activity's `distanceUnit` has no unit
+ * mapping — distance kept as residue in `extension.fitbit` instead of
+ * `performance.distance`), `unrecognized-file` (a file's basename matches none of the
+ * documented Takeout kinds).
+ */
 export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): MapperResult {
   // Structural minimum (WP7): a list of { name, text } files — the documented input shape.
   if (!Array.isArray(files))

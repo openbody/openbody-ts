@@ -576,8 +576,21 @@ export const DEFAULT_SUBJECT = "subj-001";
 
 /** Options shared by every inbound mapper. */
 export interface MapOptions {
+  /**
+   * Subject id every mapped record is stamped with. When omitted, the mapper falls
+   * back to {@link DEFAULT_SUBJECT} and reports the fabrication once via a
+   * `MapWarning` (code `"default-subject"`) — callers should almost always pass their
+   * own subject id.
+   */
   subject?: string;
-  /** RFC 3339 offset (e.g. "-07:00") stamped onto the source's offset-less local wall-clock timestamps. Default "Z". */
+  /**
+   * RFC 3339 offset (e.g. "-07:00") stamped onto the source's offset-less local
+   * wall-clock timestamps. Default `"Z"`. Only meaningful for mappers whose source
+   * format carries no offset of its own (the CSV mappers, `mapFitbitTakeout`); a
+   * format whose timestamps already carry an offset or are documented UTC (GPX, TCX,
+   * Strava, Apple Health, decoded FIT) ignores this option — see each mapper's own
+   * doc comment.
+   */
   utcOffset?: string;
 }
 

@@ -36,7 +36,23 @@ const DISC: Record<string, string> = {
 const mapDiscipline = makeDisciplineMapper(DISC, "strava");
 const disciplineFor = (t: string): string => mapDiscipline(t, t.toLowerCase());
 
-/** Map a Strava activity + streams object to OpenBody wire records. */
+/**
+ * Map a Strava activity + streams object (the documented API wire shape) to OpenBody
+ * wire records: one `sampleArray` Measurement per fetched telemetry stream (HR/power/
+ * cadence, plus a multi-channel lat/lon/alt location series), avg/max-HR interval
+ * aggregates `derivedFrom` the HR stream, and a Session linking them all via
+ * `measuredBy`.
+ *
+ * Input precondition: `input.activity` must be present, `input.activity.start_date`
+ * a parseable timestamp, `input.activity.elapsed_time` a number, and
+ * `input.streams.time.data` an array (sampleArray offsets are computed from it) —
+ * missing any of these throws {@link MapperInputError} (`mapper: "strava"`).
+ *
+ * `opts.utcOffset` is not applicable: the Strava API's `start_date` already carries
+ * an offset.
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ */
 export function mapStrava(input: StravaInput, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "strava");

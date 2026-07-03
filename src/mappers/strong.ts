@@ -14,7 +14,19 @@ import type {
 import { contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
 import { subjectFor } from "./shared.js";
 
-/** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
+/**
+ * Map a Strong CSV export to OpenBody wire records: one Session per workout (grouped
+ * by `Date`+`Workout Name`), sets grouped into Exercises by `Exercise Name`. The
+ * column delimiter (`,` or `;`) is sniffed from the header row.
+ *
+ * Input precondition: the CSV's header row must carry `Date`, `Workout Name`, and
+ * `Exercise Name` — anything else throws `MapperInputError` (`mapper: "strong"`).
+ *
+ * `opts.utcOffset` stamps Strong's offset-less `"2026-03-02 06:45:00"`-style
+ * timestamps (default `"Z"`).
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ */
 export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "strong");

@@ -142,7 +142,22 @@ function inferPiece(
   return { kind: "single", scoring: "continuous" }; // a "just row" ends wherever it ends
 }
 
-/** Map a Concept2 Logbook season CSV export to OpenBody wire records (one Session per row). */
+/**
+ * Map a Concept2 Logbook season CSV export to OpenBody wire records: one Session per
+ * row, its workout structure inferred from the PM5-generated `Description` (a single
+ * fixed-distance/fixed-time/continuous piece, or fixed-interval sets expanded into a
+ * `Block` of per-interval WorkUnits with `rest` — see the file header for the
+ * inference rules and the piece-vs-scoring table), plus a linked `heart_rate_mean`
+ * Measurement when `Avg Heart Rate` is present.
+ *
+ * Input precondition: the CSV's header row must carry a `Date` column — anything
+ * else throws `MapperInputError` (`mapper: "concept2"`).
+ *
+ * `opts.utcOffset` stamps the CSV's offset-less local-wall-clock `Date` column
+ * (default `"Z"`).
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ */
 export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "concept2");

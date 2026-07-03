@@ -73,7 +73,28 @@ interface Pt {
   power?: number;
 }
 
-/** Map a GPX 1.1 (or 1.0) document string to OpenBody wire records (see file header for shape decisions). */
+/**
+ * Map a GPX 1.1 (or 1.0) document string to OpenBody wire records: every `<trk>`/
+ * `<trkseg>` in the file concatenates into one Session plus a multi-channel lat/lon/
+ * alt location Measurement, with separate HR/cadence/power Measurements when Garmin
+ * `TrackPointExtension` data is present, all linked from the Session via
+ * `measuredBy` (see the file header for the full shape-decision rationale).
+ *
+ * Input precondition: the XML must contain a `<gpx>` root — anything else throws
+ * {@link MapperInputError} (`mapper: "gpx"`). A structurally valid GPX with no
+ * `<trkpt>` elements at all (waypoint-only `<wpt>` or route-only `<rte>` files)
+ * returns an empty result, not an error.
+ *
+ * `opts.utcOffset` is not applicable: GPX `<time>` values are always UTC (`Z`)
+ * per the GPX 1.1 schema.
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `no-mappable-content` (no `<trkpt>` elements at all), `untimed-track` (no point
+ * carries `<time>` — only a Session is emitted; geometry preserved losslessly in
+ * `extension.gpx.untimedTrack`), `dropped-untimed-points` (a mix of timed and
+ * untimed points — the untimed ones are dropped from the sampleArray streams, with
+ * the count preserved in `extension.gpx.droppedUntimedPoints`).
+ */
 export function mapGpx(xml: string, opts: MapOptions = {}): MapperResult {
   // Structural minimum (WP7): a <gpx> root. Without it this isn't a GPX document at
   // all; a valid GPX with nothing mappable (waypoint/route-only) stays a graceful

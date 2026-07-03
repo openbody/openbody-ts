@@ -17,7 +17,18 @@ import { subjectFor } from "./shared.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
-/** Map a Hevy CSV export to OpenBody wire records (one Session per workout). */
+/**
+ * Map a Hevy CSV export to OpenBody wire records: one Session per workout (grouped by
+ * `title`+`start_time`), sets grouped into Exercise/Block by exercise + superset id.
+ *
+ * Input precondition: the CSV's header row must carry `title`, `start_time`, and
+ * `exercise_title` — anything else throws `MapperInputError` (`mapper: "hevy"`).
+ *
+ * `opts.utcOffset` stamps Hevy's offset-less `"22 Dec 2025, 08:00"`-style timestamps
+ * (default `"Z"`).
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ */
 export function mapHevy(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "hevy");

@@ -75,7 +75,26 @@ interface Tp {
   watts?: number;
 }
 
-/** Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records (see file header for shape decisions). */
+/**
+ * Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records:
+ * one Session per `<Activity>`, one `continuous`-scored WorkUnit per `<Lap>`, and
+ * Trackpoint streams → sampleArray Measurements (HR/cadence/power via the
+ * `ActivityExtension` TPX `<Watts>`, plus multi-channel lat/lon/alt location) linked
+ * via `measuredBy` — see the file header for the full shape-decision rationale.
+ *
+ * Input precondition: the XML must contain a `<TrainingCenterDatabase>` root —
+ * anything else throws {@link MapperInputError} (`mapper: "tcx"`). A structurally
+ * valid TCX with no `<Activity>` elements at all (a `<Courses>`- or `<Workouts>`-only
+ * file) returns an empty result, not an error.
+ *
+ * `opts.utcOffset` is not applicable: TCX `<Time>`/`StartTime` values are always UTC
+ * (`Z`) per the TrainingCenterDatabase v2 schema.
+ *
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `dropped-untimed-points` (per-activity count of trackpoints with no `<Time>`,
+ * dropped from the sampleArray streams), `no-mappable-content` (no `<Activity>`
+ * elements in the document at all).
+ */
 export function mapTcx(xml: string, opts: MapOptions = {}): MapperResult {
   // Structural minimum (WP7): a <TrainingCenterDatabase> root. Without it this
   // isn't a TCX document; a valid TCX with no <Activity> (Courses/Workouts-only)

@@ -29,10 +29,22 @@ const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>):
 // biome-ignore lint/suspicious/noExplicitAny: documented ajv interop (same CJS default-import mismatch).
 const addFormats = addFormatsMod as unknown as (ajv: any) => void;
 
-// Compiles a JSON Schema document into a `validate` function (ajv compile + the
-// §5.2/§5.5/§5.11/§7.5 semantic checks below that the schema itself can't express).
-// Exported so `schema-loader-node.ts` can bind the same validation logic to a
-// different (OPENBODY_STANDARD-resolved) schema document without duplicating it.
+/**
+ * Compile a JSON Schema document into a `validate` function: ajv schema compilation
+ * plus the §5.2/§5.5/§5.11/§7.5 semantic checks below that a JSON Schema alone can't
+ * express (cross-field/cross-array rules — see each check function's own comment).
+ * Exported so `schema-loader-node.ts` can bind the same validation logic to a
+ * different (`OPENBODY_STANDARD`-resolved) schema document without duplicating it —
+ * useful for validating against a custom/unmerged spec draft.
+ *
+ * The returned `validate(record)` function never throws; it reports:
+ * - `{ valid: true, errors: null }` when `record` passes both ajv and the semantic checks;
+ * - `{ valid: false, errors: string }` otherwise, where `errors` is every failure —
+ *   ajv's own `errorsText` output (if the schema itself failed) followed by this
+ *   module's semantic-check messages — joined with `"; "` into one string. There is no
+ *   structured error list on the public return type; parse `errors` as a human-readable
+ *   report, not machine-structured data (each message already cites its own §-section).
+ */
 export function createValidator(schemaDoc: unknown) {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
@@ -257,5 +269,9 @@ function validateSemantics(record: WireRecord): string[] {
   return errors;
 }
 
-// Default, browser-safe export: bound to the vendored schema snapshot at module load.
+/**
+ * Default, browser-safe validator: {@link createValidator} bound to the vendored
+ * schema snapshot (`vendor/openbody.schema.json`) at module load. See
+ * {@link createValidator} for the return shape (`{ valid, errors }`).
+ */
 export const validate = createValidator(schema);
