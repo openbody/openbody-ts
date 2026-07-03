@@ -19,17 +19,17 @@ records, plus a conformance-vector runner.
 - **`equivalent(a, b)`** — true iff two documents normalize to the same set.
 - **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health,
   FIT; Health Connect via the Apple mapper): pure functions with round-trip tests
-  (`npm run mappers`). Plus format-level **GPX + TCX** mappers (`mapGpx`/`mapTcx` —
+  (`test/mappers/`). Plus format-level **GPX + TCX** mappers (`mapGpx`/`mapTcx` —
   covers Runkeeper, Komoot, AllTrails, Ride with GPS, MapMyRun, Garmin/Polar legacy
   exports): trackpoint streams → multi-channel location + HR/cadence/power
   `sampleArray` Measurements, TCX laps → per-lap WorkUnits, all linked via
-  `measuredBy` (`npm run tcx-gpx`; built against the official schemas — verify against
+  `measuredBy` (`test/mappers/{gpx,tcx}.test.ts`; built against the official schemas — verify against
   real platform exports, OB-79). And **Fitbit (Google Takeout)** — `mapFitbitTakeout`
   takes the Takeout folder's JSON files (exercise/steps/heart_rate/sleep/weight/
   resting-heart-rate): Sessions + per-day `sampleArray` series + adjacent sleep-stage
   `category` intervals (short wakes spliced in), exact fixed-point weights
-  (`npm run fitbit`; built against publicly documented Takeout structure — verify with
-  a real Takeout, OB-80). Plus two breadth mappers (`npm run concept2-thecrag`):
+  (`test/mappers/fitbit.test.ts`; built against publicly documented Takeout structure — verify
+  with a real Takeout, OB-80). Plus two breadth mappers (`test/mappers/{concept2,thecrag}.test.ts`):
   **Concept2 Logbook** season CSV (RowErg/SkiErg/BikeErg — pieces as
   time/distance/continuous WorkUnits, fixed-interval workouts as Blocks with
   per-interval rest, stroke rate/watts as §5.13 intensity, avg HR as a linked
@@ -86,12 +86,11 @@ runtime. `npm run build` compiles `src/` to `dist/` (ESM + `.d.ts`); `npm pack
 npm install
 npm run sync-schema     # vendor the schema snapshot from ../openbody (typecheck needs it)
 npm run sync-crosswalk  # vendor the exercise-name data from ../openbody-registry (ditto)
-npm test           # typecheck + lossless number checks + vectors + resolver + mapper round-trips
+npm test           # typecheck + the vitest suite (test/: lossless, vectors, resolver, mappers, validate)
 # …or individually:
-npm run vectors    # run the standard's conformance vectors against this impl
-npm run mappers    # incumbent mappers (Hevy/Strong/Strava/Apple/FIT) round-trip
-npm run resolve    # exercise-name resolver unit tests (§6.5 ladder)
-npm run lossless   # EQUIVALENCE.md lossless-number checks
+npm run vectors    # run the standard's conformance vectors against this impl (CLI wrapper)
+npx vitest run test/mappers      # just the mapper suites
+npm run coverage   # vitest with v8 coverage (thresholds enforced on src/)
 npm run typecheck
 npm run build      # compile src/ -> dist/
 ```
@@ -159,7 +158,7 @@ default sibling path `../openbody-registry`, override with `OPENBODY_REGISTRY`).
 JSON numbers are parsed **losslessly** from their decimal text (`parseLossless` →
 `LosslessNumber`), never via `float64`, before fixed-point canonicalization — so
 high-precision decimals and integers above 2^53 canonicalize to their exact value
-(`npm run lossless` proves it). Feed documents through `parseLossless` (or raw text)
+(`test/parse.test.ts`/`test/canonical.test.ts` prove it). Feed documents through `parseLossless` (or raw text)
 for full EQUIVALENCE.md fidelity; passing a value pre-parsed with `JSON.parse` falls back to the
 lossy float64 path.
 
