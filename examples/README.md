@@ -13,11 +13,22 @@ public.
 | Source | Pillar | Result |
 |---|---|---|
 | [`hevy/`](./hevy/) | B (strength) | Real Hevy CSV → Session/Exercise/WorkUnit. Validates + normalizes. |
-| [`strong/`](./strong/) | B (strength) | Strong CSV (documented columns) → same shape. Validates + normalizes. |
+| [`strong/`](./strong/) | B (strength) | Strong CSV (documented columns) → same shape, plus [`to-strong.ts`](./strong/to-strong.ts): the reverse OpenBody → Strong CSV mapper (degrade + `omissions` report). |
 | [`strava/`](./strava/) | A + B | Activity + streams → sampleArray Measurements + Session w/ `measuredBy`. Validates + normalizes. |
 | [`apple-health/`](./apple-health/) | A + B | `export.xml`: discrete + interval quantity samples, **sleep category** series, `HKWorkout` → Session. Validates + normalizes. |
+| [`fit/`](./fit/) | A + B | Decoded FIT (`mode: "list"`) activity **and** structured workout → telemetry Measurements / planned Block+WorkUnit prescriptions. |
+| [`gpx/`](./gpx/) | A + B | GPX track (+ TrackPointExtension HR/cadence) → location `sampleArray` + Session; degenerate untimed/waypoint-only cases too. |
+| [`tcx/`](./tcx/) | A + B | TCX activity + laps → per-lap WorkUnits + telemetry streams w/ `measuredBy`. |
+| [`fitbit/`](./fitbit/) | A + B | Google Takeout Fitbit folder → Sessions + per-day sampleArray series + sleep-stage intervals. |
+| [`concept2/`](./concept2/) | B (rowing/ski/bike erg) | Logbook season CSV → Session/Block/WorkUnit, fixed intervals expanded from the PM5 `Description`. |
+| [`thecrag/`](./thecrag/) | B (climbing) | Logbook CSV → one reps-scored WorkUnit per ascent, grade + send/attempt `outcome`. |
 
 Run any: `tsx examples/<src>/map-<src>.ts`
+
+> These scripts import from `../../src/...` (relative source paths) so they exercise
+> this checkout's code directly during development. A consumer of the published
+> package imports from `"@openbody/openbody-ts"` instead — see the root README's
+> "Quick start" for that form.
 
 ## What fit cleanly (no model gaps)
 

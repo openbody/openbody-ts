@@ -16,4 +16,4 @@ Takeout before trusting field-level details** (OB-80 acceptance).
 | `weight-2024-01-01.json` | Weigh-ins: `logId`, `weight` (**pounds**, community-documented), `bmi`, optional `fat`, `date "MM/DD/YY"` + `time "HH:MM:SS"`, `source` (one Aria scale, one manual/API entry; `175` also exercises integer fixed-point). |
 | `resting_heart_rate-2024-01-01.json` | Daily RHR estimate: `{ dateTime "MM/DD/YY 00:00:00", value: { date, value, error } }` — days without data export `value: 0.0` (second entry; the mapper must skip it). |
 
-Run: `npx tsx scripts/test-fitbit.ts`
+Run: `npx tsx examples/fitbit/map-fitbit.ts`
