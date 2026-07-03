@@ -4,6 +4,18 @@ import { type OpenBodyRecord, type MapOptions } from "./csv.js";
 
 export interface StravaInput { activity: Record<string, any>; streams: Record<string, any> }
 
+// sport_type (CamelCase API enum) → registry discipline token (vocab/disciplines.json);
+// unknown types round-trip as namespaced tokens (strava:<type>, §4.4 ladder), same as gpx.ts/fit.ts.
+const DISC: Record<string, string> = {
+  Run: "running", VirtualRun: "running", TrailRun: "trail_running",
+  Ride: "cycling", VirtualRide: "cycling", GravelRide: "cycling", EBikeRide: "cycling", EMountainBikeRide: "mountain_biking", MountainBikeRide: "mountain_biking",
+  Swim: "swimming", Hike: "hiking", Walk: "walking",
+  Rowing: "rowing", VirtualRow: "rowing",
+  WeightTraining: "strength", Crossfit: "functional_fitness",
+  Yoga: "yoga", Pilates: "pilates", RockClimbing: "climbing",
+};
+const disciplineFor = (t: string): string => DISC[t] ?? `strava:${t.toLowerCase()}`;
+
 /** Map a Strava activity + streams object to OpenBody wire records. */
 export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRecord[] {
   const subject = opts.subject ?? "subj-001";
@@ -53,7 +65,7 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
 
   records.push({
     id: `strava-${a.id}`, recordType: "Session", subject,
-    disciplines: [String(a.sport_type || a.type).toLowerCase()], intent: "train",
+    disciplines: [disciplineFor(String(a.sport_type || a.type))], intent: "train",
     startTime: start, endTime: end, provenance: prov("sensor"),
     workUnits: [{
       id: `strava-${a.id}-wu`, recordType: "WorkUnit", scoring: "continuous",
