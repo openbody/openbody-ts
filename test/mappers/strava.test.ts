@@ -12,6 +12,15 @@ describe("mapStrava", () => {
     expectValidAndStable(mapStrava(sample()));
   });
 
+  it("maps the activity title to Session.name (absent title → no name field)", () => {
+    const session = mapStrava(sample()).find((r) => r.recordType === "Session");
+    expect(session?.name).toBe("Morning Run");
+    const untitled = sample();
+    delete untitled.activity.name;
+    const s2 = mapStrava(untitled).find((r) => r.recordType === "Session");
+    expect(s2 && "name" in s2, "no fabricated name when the activity has none").toBe(false);
+  });
+
   // device_name is a free-form display string; the manufacturer is never invented.
   it("never fabricates a device manufacturer from device_name", () => {
     const withHr = mapStrava(sample());

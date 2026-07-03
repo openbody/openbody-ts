@@ -119,6 +119,9 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
     id: `strava-${a.id}`,
     recordType: "Session",
     subject,
+    // The activity's user-facing title ("Morning Run") — same source-title → Session.name
+    // posture as the gpx/tcx/hevy/concept2 mappers.
+    ...(a.name ? { name: a.name } : {}),
     disciplines: [disciplineFor(String(a.sport_type || a.type))],
     intent: "train",
     startTime: start,
