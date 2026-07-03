@@ -29,7 +29,13 @@ records, plus a conformance-vector runner.
   resting-heart-rate): Sessions + per-day `sampleArray` series + adjacent sleep-stage
   `category` intervals (short wakes spliced in), exact fixed-point weights
   (`npm run fitbit`; built against publicly documented Takeout structure — verify with
-  a real Takeout, OB-80). Plus one outbound mapper, OpenBody → Strong CSV
+  a real Takeout, OB-80). Plus two breadth mappers (`npm run concept2-thecrag`):
+  **Concept2 Logbook** season CSV (RowErg/SkiErg/BikeErg — pieces as
+  time/distance/continuous WorkUnits, fixed-interval workouts as Blocks with
+  per-interval rest, stroke rate/watts as §5.13 intensity, avg HR as a linked
+  Measurement) and **theCrag** climbing logbook CSV (one Session per crag day; each
+  ascent a reps-scored WorkUnit with grade modifier and send/attempt `outcome` per
+  the canonical §5.18 corpus encoding). Plus one outbound mapper, OpenBody → Strong CSV
   (`mapOpenBodyToStrong`) — the import path into Strong *and* Hevy (which accepts
   Strong-format CSVs). Covers everything Strong's CSV can hold: reps ± weight,
   bodyweight, duration and distance sets, RPE, notes — with non-kg/m/s units converted

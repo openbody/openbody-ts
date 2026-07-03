@@ -10,6 +10,8 @@ export { mapFit, type FitInput } from "./fit.js";
 export { mapGpx } from "./gpx.js";
 export { mapTcx } from "./tcx.js";
 export { mapFitbitTakeout, type FitbitFile, type FitbitMapOptions } from "./fitbit.js";
+export { mapConcept2 } from "./concept2.js";
+export { mapTheCrag } from "./thecrag.js";
 // Outbound (OpenBody → incumbent): the mirror direction, currently just Strong. Returns
 // { csv, omissions } — SPEC §10's directional-lossless rule: emitting into a less-expressive
 // target is best-effort, and every material loss is reported (or throws with { strict: true }).
