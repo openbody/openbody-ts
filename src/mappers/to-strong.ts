@@ -21,6 +21,8 @@
 // `omissions` report ({ recordId, field?, reason }) covering every *material* loss, so a UI
 // can say "N things Strong can't represent were left out". Reported as omissions:
 //   - non-Session top-level records (Measurements, Programs, … — no CSV home)
+//   - WorkUnits with no `exerciseRef` (Session.workUnits from telemetry mappers, bare Block
+//     children) — Strong's CSV keys every row on an Exercise Name, so there is nothing to write
 //   - Block structure: `grouping` (supersets), `roundScheme`, `repetitions`, block-level
 //     `scoring` schemes (AMRAP/EMOM) — children are flattened to consecutive plain sets
 //   - `scoring: "energy"`/`"continuous"` WorkUnits — emitted as plain sets where they carry
@@ -67,12 +69,12 @@ export interface ToStrongOptions extends MapOptions {
   strict?: boolean;
 }
 
-// RFC 8785/3339 "…T…Z" → Strong's "YYYY-MM-DD HH:MM:SS" (inverse of the `f.Date.replace(" ",
-// "T") + "Z"` step in strong.ts). Assumes no UTC offset and no fractional seconds, matching
-// what `mapStrong` itself produces.
+// RFC 3339 → Strong's offset-less "YYYY-MM-DD HH:MM:SS" (inverse of the `toRfc3339` step in
+// strong.ts): the wall-clock part is kept and the offset/fractional seconds dropped —
+// Strong's Date column has no offset concept.
 function toStrongDate(iso: string | undefined): string {
   if (!iso) return "";
-  return iso.replace("T", " ").replace(/\.\d+Z$/, "").replace(/Z$/, "");
+  return iso.replace("T", " ").replace(/\.\d+/, "").replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
 }
 
 function csvEscape(v: string): string {
@@ -194,16 +196,19 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
       : 0;
     const workoutNo = session.extension?.["io.strong.export"]?.workoutNo ?? String(wIdx);
 
-    // Session.exercises passes through; Session.blocks flattens (§5.3 at-most-one container):
-    // Strong's flat CSV has no superset/round concept, so Block children become consecutive
-    // plain sets and the lost structure is reported.
+    // Session.exercises passes through; Session.workUnits (the collapsed §5.1 hierarchy —
+    // strava/fit/gpx/tcx/concept2/thecrag produce these) joins it where a unit names its own
+    // exercise; Session.blocks flattens (§5.3 at-most-one container): Strong's flat CSV has
+    // no superset/round concept, so Block children become consecutive plain sets and the
+    // lost structure is reported.
     const exercises: OpenBodyRecord[] = [];
     const walk = (node: OpenBodyRecord) => {
       if (node?.recordType === "Exercise") exercises.push(node);
       else if (node?.recordType === "WorkUnit") {
-        // A bare WorkUnit child can stand alone only if it names its own exercise.
+        // A bare WorkUnit (Session.workUnits or a Block child) can stand alone only if it
+        // names its own exercise.
         if (node.exerciseRef) exercises.push({ recordType: "Exercise", id: node.id, exerciseRef: node.exerciseRef, workUnits: [node] });
-        else omit(node.id, "exerciseRef", "WorkUnit under a Block carries no exerciseRef — no Exercise Name to write; set dropped");
+        else omit(node.id, "exerciseRef", "WorkUnit carries no exerciseRef — no Exercise Name to write; set dropped");
       } else if (node?.recordType === "Block") {
         if (node.grouping !== undefined) omit(node.id, "grouping", `Block grouping "${node.grouping}" flattened to consecutive plain sets — Strong CSV has no superset/group concept`);
         if (node.roundScheme !== undefined) omit(node.id, "roundScheme", `Block roundScheme [${node.roundScheme}] dropped — children emitted once; Strong CSV has no rounds`);
@@ -214,6 +219,7 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
     };
     (session.exercises ?? []).forEach(walk);
     (session.blocks ?? []).forEach(walk);
+    (session.workUnits ?? []).forEach(walk);
 
     for (const ex of exercises) {
       const er = ex.exerciseRef;
