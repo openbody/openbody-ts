@@ -105,6 +105,18 @@ let total = cases.length;
   const rpe = row([session({ exercises: [exercise([{ id: "w1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 5, effortLoad: [{ kind: "internal", method: "RPE", value: 8.5 }] } }])] })]);
   if (rpe.rows[0]?.RPE !== "8.5" || rpe.omissions.length) errs.push(`RPE: ${rpe.rows[0]?.RPE}, omissions=${rpe.omissions.length}`);
 
+  // Session.workUnits (the collapsed §5.1 hierarchy strava/fit/tcx/gpx/concept2/thecrag
+  // produce): a unit naming its own exercise emits a row; a ref-less one has no Exercise
+  // Name to write and must land in the omissions report, not vanish silently.
+  const wus = row([session({ workUnits: [
+    { id: "wu1", recordType: "WorkUnit", exerciseRef: { opaque: "RowErg" }, scoring: "time", performance: { time: { absolute: { value: 300, unit: "s" } } } },
+    { id: "wu2", recordType: "WorkUnit", scoring: "continuous", performance: { distance: { absolute: { value: 5000, unit: "m" } } } },
+  ] })]);
+  if (wus.rows.length !== 1 || wus.rows[0]?.["Exercise Name"] !== "RowErg" || wus.rows[0]?.Seconds !== "300")
+    errs.push(`session.workUnits row: ${JSON.stringify(wus.rows[0])}`);
+  if (!wus.omissions.some((o) => o.recordId === "wu2" && o.field === "exerciseRef"))
+    errs.push(`ref-less session.workUnit not reported as an omission: ${JSON.stringify(wus.omissions)}`);
+
   // omissions: a superset Block flattens to plain sets (both rows emitted) and a %1RM load
   // has no absolute kg value — both reported with recordIds, neither fatal.
   const lossy = [session({
@@ -128,7 +140,67 @@ let total = cases.length;
   if (!threw) errs.push("strict mode did not throw on a lossy document");
 
   if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
-  else console.log(`  ok   ${name} — duration/distance/bodyweight/lb→kg/RPE map; superset+%1RM degrade with ${deg.omissions.length} reported omissions; strict throws`);
+  else console.log(`  ok   ${name} — duration/distance/bodyweight/lb→kg/RPE map; workUnits emit/report; superset+%1RM degrade with ${deg.omissions.length} reported omissions; strict throws`);
+}
+
+// Timezone independence + stable ids: offset-less CSV wall-clock timestamps must map to the
+// SAME UTC instant on every host TZ (run the suite under different TZ= values to prove it),
+// opts.utcOffset stamps local sources, and Session ids are content-derived — exporting one
+// more workout must not renumber the ones already synced (§7.1 dedup).
+{
+  const name = "timezone-independent timestamps + stable ids";
+  total++;
+  const errs: string[] = [];
+
+  const hevyCsv = read("hevy/hevy-sample.csv");
+  const hevy = mapHevy(hevyCsv);
+  if (hevy[0]?.startTime !== "2025-12-22T08:00:00Z") errs.push(`hevy startTime ${hevy[0]?.startTime}, want 2025-12-22T08:00:00Z regardless of host TZ`);
+  if (mapHevy(hevyCsv, { utcOffset: "-08:00" })[0]?.startTime !== "2025-12-22T08:00:00-08:00") errs.push("hevy opts.utcOffset not stamped onto the wall-clock time");
+  const strongCsv = read("strong/strong-sample.csv");
+  const strong = mapStrong(strongCsv);
+  if (strong[0]?.startTime !== "2025-12-20T18:00:00Z" || strong[0]?.endTime !== "2025-12-20T19:00:00Z")
+    errs.push(`strong window ${strong[0]?.startTime}..${strong[0]?.endTime}, want 18:00Z..19:00Z regardless of host TZ`);
+
+  if (!/^hevy-sess-[0-9a-f]{8}$/.test(hevy[0]?.id) || !hevy[0]?.clientRecordId) errs.push(`hevy id/clientRecordId not content-derived: ${hevy[0]?.id}/${hevy[0]?.clientRecordId}`);
+  const [head, ...rest] = strongCsv.trim().split("\n");
+  const withExtra = [head, "2025-12-19 07:00:00,Leg Day,1800,Squat (Barbell),1,100,5,0,0,,9", ...rest].join("\n");
+  const renumbered = mapStrong(withExtra);
+  if (renumbered.length !== 2) errs.push(`expected 2 sessions after prepending a workout, got ${renumbered.length}`);
+  const moved = renumbered.find((r) => r.clientRecordId === strong[0]?.clientRecordId);
+  if (!strong[0]?.clientRecordId || moved?.id !== strong[0]?.id) errs.push(`strong id not stable under re-export: ${strong[0]?.id} → ${moved?.id}`);
+
+  if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
+  else console.log(`  ok   ${name} — hevy/strong instants fixed at UTC (utcOffset stamps local); ids survive a re-export with one more workout`);
+}
+
+// Strava fabrication guards: device manufacturer is never invented from device_name; HR
+// summary aggregates carry derivedFrom only when the HR stream was actually fetched (no
+// dangling refs); a missing time stream is a clear error, not a raw TypeError.
+{
+  const name = "strava fabrication guards";
+  total++;
+  const errs: string[] = [];
+
+  const withHr = mapStrava(JSON.parse(read("strava/strava-sample.json")));
+  const dev = withHr.find((r) => r.recordType === "Session")?.provenance?.device;
+  if (dev?.manufacturer !== undefined || dev?.model !== "Garmin Forerunner 965") errs.push(`device ${JSON.stringify(dev)} — manufacturer must not be fabricated`);
+
+  const noHrInput = JSON.parse(read("strava/strava-sample.json"));
+  delete noHrInput.streams.heartrate;
+  const noHr = mapStrava(noHrInput);
+  const ids = new Set(noHr.map((r) => r.id));
+  for (const r of noHr) for (const l of r.links ?? []) if (!ids.has(l.ref)) errs.push(`dangling ${l.type} → ${l.ref} on ${r.id}`);
+  const mean = noHr.find((r) => r.type === "heart_rate_mean");
+  if (!mean) errs.push("hr-mean aggregate should still be emitted without the stream (activity summary stands alone)");
+  else if (mean.links !== undefined) errs.push(`hr-mean must not carry derivedFrom without an HR stream: ${JSON.stringify(mean.links)}`);
+  for (const r of noHr) { const v = validate(r); if (!v.valid) errs.push(`wire ${r.recordType} ${r.id}: ${v.errors}`); }
+
+  let msg = "";
+  try { mapStrava({ activity: noHrInput.activity, streams: {} }); } catch (e: any) { msg = String(e?.message); }
+  if (!msg.includes("streams.time")) errs.push(`missing time stream: expected a clear error naming streams.time, got ${JSON.stringify(msg)}`);
+
+  if (errs.length) { fail++; console.log(`  FAIL ${name}\n${errs.map((e) => "       - " + e).join("\n")}`); }
+  else console.log(`  ok   ${name} — model-only device; aggregates valid + link-free without the HR stream; missing time stream errors clearly`);
 }
 
 // Resolver wiring (OB-65): mapped Hevy/Strong exercises climb the §6.5 ladder — known
