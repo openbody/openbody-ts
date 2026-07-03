@@ -10,9 +10,8 @@
 // and ActivityExtensionv2 XSDs); verify against real platform exports (OB-79
 // acceptance).
 //
-// Parsing: the same no-DOM technique as apple-health.ts — namespace-prefix-tolerant
-// regex extraction over the raw XML string — browser-safe AND node-safe, zero deps
-// (<ns3:Watts> and <Watts> both match).
+// Parsing: the shared regex-XML helpers (see src/mappers/xml.ts — no DOM, zero
+// deps, namespace-prefix tolerant: <ns3:Watts> and <Watts> both match).
 //
 // Shape decisions:
 // - Lap → WorkUnit (not Block). A TCX lap is a contiguous, atomically-scored slice
@@ -45,31 +44,8 @@
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
 import type { MapOptions, OpenBodyRecord } from "../types.js";
+import { elRe, els, first, numText, text } from "./xml.js";
 
-// ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
-const NAME = "[A-Za-z_][\\w.-]*";
-const elRe = (tag: string) =>
-  new RegExp(`<(?:${NAME}:)?${tag}((?:\\s[^>]*?)?)(?:/>|>([\\s\\S]*?)</(?:${NAME}:)?${tag}\\s*>)`, "g");
-interface El {
-  attrs: Record<string, string>;
-  inner: string;
-}
-function* els(xml: string, tag: string): Generator<El> {
-  for (const m of xml.matchAll(elRe(tag)))
-    yield {
-      attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])),
-      inner: m[2] ?? "",
-    };
-}
-const first = (xml: string, tag: string): El | undefined => els(xml, tag).next().value;
-const text = (xml: string, tag: string): string | undefined => {
-  const t = first(xml, tag)?.inner.trim();
-  return t === "" ? undefined : t;
-};
-const numText = (xml: string, tag: string): number | undefined => {
-  const t = text(xml, tag);
-  return t == null ? undefined : Number(t);
-};
 const wrappedValue = (xml: string, tag: string): number | undefined => {
   const el = first(xml, tag); // TCX HeartRateInBeatsPerMinute_t: <Tag><Value>n</Value></Tag>
   return el ? numText(el.inner, "Value") : undefined;

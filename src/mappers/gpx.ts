@@ -9,12 +9,10 @@
 // Garmin TrackPointExtension XSD, Wikipedia's public GPX example); verify against
 // real platform exports (OB-79 acceptance).
 //
-// Parsing: the same no-DOM technique as apple-health.ts — regex extraction over the
-// raw XML string — so the mapper stays browser-safe AND node-safe with zero
-// dependencies. Element matching is namespace-prefix tolerant (<gpxtpx:hr>, <ns3:hr>,
-// and <hr> all match), which is also what makes GPX 1.0 parse identically: 1.0 uses
-// the same trk/trkseg/trkpt element names, only the xmlns differs, and this parser
-// never looks at namespaces.
+// Parsing: the shared regex-XML helpers (see src/mappers/xml.ts — no DOM, zero
+// deps, namespace-prefix tolerant). Namespace tolerance is what makes GPX 1.0 parse
+// identically: 1.0 uses the same trk/trkseg/trkpt element names, only the xmlns
+// differs, and the parser never looks at namespaces.
 //
 // Shape decisions:
 // - All <trk>/<trkseg> concatenate into ONE Session + one location series. GPX
@@ -39,31 +37,7 @@
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
 import type { MapOptions, OpenBodyRecord } from "../types.js";
-
-// ---- minimal namespace-tolerant XML helpers (no DOMParser, no node deps) ----
-const NAME = "[A-Za-z_][\\w.-]*";
-const elRe = (tag: string) =>
-  new RegExp(`<(?:${NAME}:)?${tag}((?:\\s[^>]*?)?)(?:/>|>([\\s\\S]*?)</(?:${NAME}:)?${tag}\\s*>)`, "g");
-interface El {
-  attrs: Record<string, string>;
-  inner: string;
-}
-function* els(xml: string, tag: string): Generator<El> {
-  for (const m of xml.matchAll(elRe(tag)))
-    yield {
-      attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])),
-      inner: m[2] ?? "",
-    };
-}
-const first = (xml: string, tag: string): El | undefined => els(xml, tag).next().value;
-const text = (xml: string, tag: string): string | undefined => {
-  const t = first(xml, tag)?.inner.trim();
-  return t === "" ? undefined : t;
-};
-const numText = (xml: string, tag: string): number | undefined => {
-  const t = text(xml, tag);
-  return t == null ? undefined : Number(t);
-};
+import { els, first, numText, text } from "./xml.js";
 
 const DISC: Record<string, string> = {
   running: "running",
