@@ -179,7 +179,10 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       return wu;
     });
 
-    const start = laps[0]?.attrs.StartTime ?? actId ?? mStart;
+    // <Id> is an identifier, not semantically a timestamp — most producers happen to set it
+    // to the start time, so it serves as a fallback only when it actually parses as a date.
+    const idAsTime = actId && !Number.isNaN(Date.parse(actId)) ? actId : undefined;
+    const start = laps[0]?.attrs.StartTime ?? idAsTime ?? mStart;
     const totalSec = laps.reduce((s, l) => s + (numText(l.meta, "TotalTimeSeconds") ?? 0), 0);
     const end = mEnd ?? (start && totalSec ? iso(Date.parse(start) + totalSec * 1000) : undefined);
 

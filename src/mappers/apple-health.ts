@@ -19,7 +19,7 @@ const typeFor = (hk: string, map: Record<string, string>) => map[hk] ?? "apple:"
 export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const subject = opts.subject ?? "subj-001";
   const records: OpenBodyRecord[] = [];
-  const measuredBy: OpenBodyRecord[] = [];
+  const hrRecords: { ref: string; s: number; e: number }[] = [];
   let i = 0;
 
   for (const m of xml.matchAll(/<Record\b([^>]*?)\/?>/g)) {
@@ -29,7 +29,8 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
       const id = "apple-q-" + i;
       records.push({ id, recordType: "Measurement", subject, type: typeFor(a.type, QTY),
         quantity: Number(a.value), unit: UNIT[a.unit] ?? a.unit, startTime: rfc(a.startDate), endTime: rfc(a.endDate), provenance: prov });
-      if (a.type === "HKQuantityTypeIdentifierHeartRate") measuredBy.push({ type: "measuredBy", ref: id });
+      if (a.type === "HKQuantityTypeIdentifierHeartRate")
+        hrRecords.push({ ref: id, s: Date.parse(rfc(a.startDate)), e: Date.parse(rfc(a.endDate)) });
     } else if (a.type === "HKCategoryTypeIdentifierSleepAnalysis") {
       // §4.3: sleep stages are multiple category Measurements over adjacent intervals.
       const stage = a.value.replace("HKCategoryValueSleepAnalysis", "").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
@@ -40,17 +41,23 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
 
   for (const m of xml.matchAll(/<Workout\b([^>]*?)\/?>/g)) {
     const a = attrs(m[1]); i++;
+    const start = rfc(a.startDate), end = rfc(a.endDate);
     const durSec = a.durationUnit === "min" ? Number(a.duration) * 60 : Number(a.duration);
     const perf: OpenBodyRecord = {};
     if (a.totalDistance) perf.distance = { absolute: { value: Number(a.totalDistance), unit: a.totalDistanceUnit } };
     if (a.totalEnergyBurned) perf.energy = { absolute: { value: Number(a.totalEnergyBurned), unit: a.totalEnergyBurnedUnit } };
-    perf.time = { absolute: { value: durSec, unit: "s" } };
+    if (Number.isFinite(durSec)) perf.time = { absolute: { value: durSec, unit: "s" } }; // duration attr may be absent
+    // §7.2 measuredBy: only the HR records whose window falls inside THIS workout's window —
+    // linking every <Record> in the export to every workout would fabricate associations.
+    const ws = Date.parse(start), we = Date.parse(end);
+    const measuredBy = hrRecords.filter((h) => h.s >= ws && h.e <= we).map((h) => ({ type: "measuredBy", ref: h.ref }));
     records.push({
       id: "apple-workout-" + i, recordType: "Session", subject,
       disciplines: [typeFor(a.workoutActivityType, DISC)], intent: "train",
-      startTime: rfc(a.startDate), endTime: rfc(a.endDate),
+      startTime: start, endTime: end,
       provenance: { method: "sensor", sourceApp: "apple", device: { manufacturer: "apple", model: a.sourceName } },
-      workUnits: [{ id: "apple-workout-" + i + "-wu", recordType: "WorkUnit", scoring: "continuous", performance: perf, links: measuredBy }],
+      workUnits: [{ id: "apple-workout-" + i + "-wu", recordType: "WorkUnit", scoring: "continuous", performance: perf,
+        ...(measuredBy.length ? { links: measuredBy } : {}) }],
     });
   }
   return records;

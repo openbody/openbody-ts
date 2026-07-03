@@ -133,10 +133,16 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
             quantity: x.steps, unit: "1", startTime: start, endTime: end, provenance: prov("sensor") });
           measuredBy.push({ type: "measuredBy", ref: `${sid}-steps` });
         }
-        const perf: Record<string, any> = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
-        if (x.distance != null) perf.distance = { absolute: { value: x.distance, unit: DIST_UNIT[x.distanceUnit] ?? "km" } };
-        if (x.calories != null) perf.energy = { absolute: { value: x.calories, unit: "kcal" } };
         const extra: Record<string, any> = {};
+        const perf: Record<string, any> = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
+        if (x.distance != null) {
+          const unit = DIST_UNIT[x.distanceUnit];
+          // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
+          // value+unit pair rides the extension.fitbit residue rail instead.
+          if (unit) perf.distance = { absolute: { value: x.distance, unit } };
+          else { extra.distance = x.distance; if (x.distanceUnit != null) extra.distanceUnit = x.distanceUnit; }
+        }
+        if (x.calories != null) perf.energy = { absolute: { value: x.calories, unit: "kcal" } };
         if (Array.isArray(x.heartRateZones) && x.heartRateZones.length) extra.heartRateZones = x.heartRateZones;
         if (Array.isArray(x.activityLevel) && x.activityLevel.length) extra.activityLevel = x.activityLevel;
         if (x.elevationGain != null) extra.elevationGain = x.elevationGain;
