@@ -25,7 +25,11 @@ describe("mapTheCrag", () => {
 
   // The documented Ascent Type → outcome table (canonical corpus encoding:
   // climbing-send-attempt.valid.json / §5.18).
-  const expectOutcome = (route: string, value: boolean | undefined, attempts: { made: number; attempted: number } | undefined) => {
+  const expectOutcome = (
+    route: string,
+    value: boolean | undefined,
+    attempts: { made: number; attempted: number } | undefined,
+  ) => {
     const wu = byRoute(route);
     expect(wu, `${route}: no WorkUnit found (route name must lead the notes)`).toBeDefined();
     const o = wu?.performance?.outcome;
@@ -72,16 +76,18 @@ describe("mapTheCrag", () => {
       expect(w.scoring, w.id).toBe("reps");
       expect(w.performance?.reps, w.id).toBe(1);
     }
-    expect(byRoute("Wheel of Life")?.performance?.modifiers,
-      "Ascent Grade must win over Route Grade").toEqual([{ type: "grade", value: "V10" }]);
+    expect(byRoute("Wheel of Life")?.performance?.modifiers, "Ascent Grade must win over Route Grade").toEqual([
+      { type: "grade", value: "V10" },
+    ]);
     expect(byRoute("Kachoong")?.notes, "comment not carried into notes").toContain("Finally!");
   });
 
   it("groups by date + crag with honest disciplines and TZ-safe dates", () => {
     const day1 = crag.find((s) => s.name === "Arapiles");
     const day2 = crag.find((s) => s.name === "Hollow Mountain Cave");
-    expect(day1?.startTime, "an offset-carrying Ascent Date must pass through untouched by the host TZ")
-      .toBe("2026-05-16T00:00:00Z");
+    expect(day1?.startTime, "an offset-carrying Ascent Date must pass through untouched by the host TZ").toBe(
+      "2026-05-16T00:00:00Z",
+    );
     expect(day1?.disciplines).toEqual(["climbing"]);
     expect(day2?.disciplines).toEqual(["bouldering"]);
     expect(day1?.workUnits).toHaveLength(6);
@@ -89,9 +95,14 @@ describe("mapTheCrag", () => {
   });
 
   it.skipIf(!haveRegistry)("every canonical exerciseRef id exists in the registry", () => {
-    const known = new Set((JSON.parse(fs.readFileSync(registryExercisesPath, "utf8")) as { id: string }[]).map((e) => e.id));
+    const known = new Set(
+      (JSON.parse(fs.readFileSync(registryExercisesPath, "utf8")) as { id: string }[]).map((e) => e.id),
+    );
     const ids = collectExerciseRefIds(crag);
-    expect([...ids].some((i) => i.startsWith("climb.")), "no climb.* ids emitted at all").toBe(true);
+    expect(
+      [...ids].some((i) => i.startsWith("climb.")),
+      "no climb.* ids emitted at all",
+    ).toBe(true);
     for (const id of ids) expect(known.has(id), `exerciseRef id "${id}" not in the registry`).toBe(true);
   });
 

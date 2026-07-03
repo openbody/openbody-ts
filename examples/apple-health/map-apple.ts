@@ -16,7 +16,9 @@ console.log(`Mapped Apple Health export -> ${records.length} OpenBody records.\n
 let bad = 0;
 for (const r of records) {
   const v = validate(r);
-  console.log(`  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id} (${r.type ?? r.disciplines?.[0]}${r.category ? "=" + r.category : ""})${v.valid ? "" : " — " + v.errors}`);
+  console.log(
+    `  ${v.valid ? "ok  " : "FAIL"} ${r.recordType} ${r.id} (${r.type ?? r.disciplines?.[0]}${r.category ? "=" + r.category : ""})${v.valid ? "" : " — " + v.errors}`,
+  );
   if (!v.valid) bad++;
 }
 console.log(bad ? `\n${bad} invalid` : `\nAll ${records.length} wire records validate. ✅`);

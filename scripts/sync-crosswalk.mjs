@@ -25,7 +25,9 @@ const registryDir = process.env.OPENBODY_REGISTRY
 
 const exercisesPath = path.join(registryDir, "data/exercises.json");
 if (!fs.existsSync(exercisesPath)) {
-  console.error(`sync-crosswalk: no registry found at ${exercisesPath} — set OPENBODY_REGISTRY or check out the sibling openbody-registry repo.`);
+  console.error(
+    `sync-crosswalk: no registry found at ${exercisesPath} — set OPENBODY_REGISTRY or check out the sibling openbody-registry repo.`,
+  );
   process.exit(1);
 }
 
@@ -62,4 +64,6 @@ const destDir = path.join(root, "vendor");
 fs.mkdirSync(destDir, { recursive: true });
 const dest = path.join(destDir, "crosswalk.json");
 fs.writeFileSync(dest, JSON.stringify(out, null, 1) + "\n");
-console.log(`sync-crosswalk: ${registryDir} -> ${dest} (${entries.length} registry entries, ${APP_SOURCES.map((a) => `${a}: ${Object.keys(aliases[a]).length}`).join(", ")})`);
+console.log(
+  `sync-crosswalk: ${registryDir} -> ${dest} (${entries.length} registry entries, ${APP_SOURCES.map((a) => `${a}: ${Object.keys(aliases[a]).length}`).join(", ")})`,
+);

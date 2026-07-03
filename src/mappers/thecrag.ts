@@ -58,17 +58,42 @@ import type { OpenBodyRecord, MapOptions } from "../types.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
 const CLEAN = new Set([
-  "red point", "pink point", "greenpoint", "ground up red point", "send", "tick", "clean", "repeat",
-  "top rope", "top rope clean", "second", "second clean", "ghost", "lead solo", "roped solo",
-  "aid", "aid solo", "deep water solo",
+  "red point",
+  "pink point",
+  "greenpoint",
+  "ground up red point",
+  "send",
+  "tick",
+  "clean",
+  "repeat",
+  "top rope",
+  "top rope clean",
+  "second",
+  "second clean",
+  "ghost",
+  "lead solo",
+  "roped solo",
+  "aid",
+  "aid solo",
+  "deep water solo",
 ]);
-const NOT_SENT = new Set(["attempt", "working", "hang dog", "dog", "retreat", "dab", "top rope with rest", "second with rest"]);
+const NOT_SENT = new Set([
+  "attempt",
+  "working",
+  "hang dog",
+  "dog",
+  "retreat",
+  "dab",
+  "top rope with rest",
+  "second with rest",
+]);
 
 const TOP_ROPE_TYPES = /^(top rope|second|ghost)\b/;
 const GENERIC_ROUTE_STYLES = new Set(["aid", "alpine", "free solo", "deep water solo", "ice", "mixed"]);
 
 function exerciseRefFor(gearStyle: string, ascentType: string): OpenBodyRecord {
-  const g = gearStyle.toLowerCase(), t = ascentType.toLowerCase();
+  const g = gearStyle.toLowerCase(),
+    t = ascentType.toLowerCase();
   const opaque = gearStyle || ascentType || "climb";
   if (g === "boulder") return { id: "climb.boulder", opaque };
   if (g === "top rope" || g === "second" || TOP_ROPE_TYPES.test(t)) return { id: "climb.route.top-rope", opaque };
@@ -141,13 +166,22 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[]
     // get opts.utcOffset stamped rather than the host TZ's interpretation.
     const startTime = f["Ascent Date"] ? toRfc3339(f["Ascent Date"], opts.utcOffset) : undefined;
     records.push({
-      id: sid, recordType: "Session", subject,
+      id: sid,
+      recordType: "Session",
+      subject,
       ...(f["Crag Name"] ? { name: f["Crag Name"] } : {}),
       disciplines,
       ...(startTime ? { startTime } : {}),
       provenance: { method: "manual", sourceApp: "thecrag" },
       ...(f["Crag Path"] || f["Country"]
-        ? { extension: { thecrag: { ...(f["Crag Path"] ? { cragPath: f["Crag Path"] } : {}), ...(f["Country"] ? { country: f["Country"] } : {}) } } }
+        ? {
+            extension: {
+              thecrag: {
+                ...(f["Crag Path"] ? { cragPath: f["Crag Path"] } : {}),
+                ...(f["Country"] ? { country: f["Country"] } : {}),
+              },
+            },
+          }
         : {}),
       workUnits,
     });

@@ -85,24 +85,40 @@ interface Piece {
 }
 
 /** Infer the workout structure from the PM5-generated Description (see file header). */
-function inferPiece(desc: string, workSec: number | undefined, workDist: number | undefined, restSec: number | undefined): Piece {
+function inferPiece(
+  desc: string,
+  workSec: number | undefined,
+  workDist: number | undefined,
+  restSec: number | undefined,
+): Piece {
   const d = desc.trim();
   const mDist = d.match(/^(\d+)x([\d,]+)m(?:\/(\d+(?::\d+)*)r)?/);
   if (mDist) {
     const [, nStr = "", valStr = "", restStr] = mDist; // groups 1-2 always match; defaults only satisfy the checker
     const n = Number(nStr);
-    return { kind: "intervals", n, childScoring: "distance", childValue: Number(valStr.replace(/,/g, "")),
-      restSec: parseClock(restStr) ?? (restSec && n ? restSec / n : undefined) };
+    return {
+      kind: "intervals",
+      n,
+      childScoring: "distance",
+      childValue: Number(valStr.replace(/,/g, "")),
+      restSec: parseClock(restStr) ?? (restSec && n ? restSec / n : undefined),
+    };
   }
   const mTime = d.match(/^(\d+)x(\d+(?::\d+)+)(?:\/(\d+(?::\d+)*)r)?/);
   if (mTime) {
     const n = Number(mTime[1]);
-    return { kind: "intervals", n, childScoring: "time", childValue: parseClock(mTime[2]),
-      restSec: parseClock(mTime[3]) ?? (restSec && n ? restSec / n : undefined) };
+    return {
+      kind: "intervals",
+      n,
+      childScoring: "time",
+      childValue: parseClock(mTime[2]),
+      restSec: parseClock(mTime[3]) ?? (restSec && n ? restSec / n : undefined),
+    };
   }
   if (/^v/.test(d)) return { kind: "variable" };
   const mFixedDist = d.match(/^([\d,]+)m\b/);
-  if (mFixedDist && Number((mFixedDist[1] ?? "").replace(/,/g, "")) === workDist) return { kind: "single", scoring: "distance" };
+  if (mFixedDist && Number((mFixedDist[1] ?? "").replace(/,/g, "")) === workDist)
+    return { kind: "single", scoring: "distance" };
   const mFixedTime = d.match(/^(\d+(?::\d+)+)\b/);
   if (mFixedTime && parseClock(mFixedTime[1]) === workSec) return { kind: "single", scoring: "time" };
   return { kind: "single", scoring: "continuous" }; // a "just row" ends wherever it ends
@@ -140,12 +156,17 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     const off = opts.utcOffset ?? "Z";
     const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
     const end = new Date(Date.parse(wall + "Z") + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
-    const prov = { method: "sensor", sourceApp: "concept2", ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}) };
+    const prov = {
+      method: "sensor",
+      sourceApp: "concept2",
+      ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}),
+    };
 
     // Whole-workout achieved intensity (§5.13) — only honest on a single piece (see header).
     const intensity: OpenBodyRecord[] = [];
     if (piece.kind === "single") {
-      if (strokeRate) intensity.push({ dimension: "cadence", unit: "/min", value: { absolute: { value: strokeRate } } });
+      if (strokeRate)
+        intensity.push({ dimension: "cadence", unit: "/min", value: { absolute: { value: strokeRate } } });
       if (avgWatts) intensity.push({ dimension: "power", unit: "W", value: { absolute: { value: avgWatts } } });
     }
 
@@ -164,11 +185,17 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     if (totalCal && piece.scoring !== "continuous") ext.totalCal = totalCal;
 
     const session: OpenBodyRecord = {
-      id: sid, recordType: "Session", subject, clientRecordId: logId,
+      id: sid,
+      recordType: "Session",
+      subject,
+      clientRecordId: logId,
       ...(r["Description"] ? { name: r["Description"] } : {}),
       ...(r["Comments"] ? { notes: r["Comments"] } : {}),
-      disciplines: [machine.discipline], intent: "train",
-      startTime: start, endTime: end, provenance: prov,
+      disciplines: [machine.discipline],
+      intent: "train",
+      startTime: start,
+      endTime: end,
+      provenance: prov,
     };
 
     if (piece.kind === "intervals" && piece.n && piece.childValue != null) {
@@ -182,14 +209,22 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
             ? { distance: { absolute: { value: childValue, unit: "m" } } }
             : { time: { absolute: { value: childValue, unit: "s" } } };
         if (perIntervalRest) perf.rest = { absolute: { value: perIntervalRest, unit: "s" } };
-        return { id: `${sid}-int${j + 1}`, recordType: "WorkUnit", exerciseRef, scoring: childScoring, performance: perf };
+        return {
+          id: `${sid}-int${j + 1}`,
+          recordType: "WorkUnit",
+          exerciseRef,
+          scoring: childScoring,
+          performance: perf,
+        };
       });
-      session.blocks = [{ id: `${sid}-blk`, recordType: "Block", ...(r["Description"] ? { name: r["Description"] } : {}), children }];
+      session.blocks = [
+        { id: `${sid}-blk`, recordType: "Block", ...(r["Description"] ? { name: r["Description"] } : {}), children },
+      ];
     } else {
       const perf: OpenBodyRecord = {};
       // A "single" piece always carries a scoring from inferPiece; "continuous" is the
       // honest degradation for any shape that somehow reaches here without one.
-      const scoring = piece.kind === "variable" ? "continuous" : piece.scoring ?? "continuous";
+      const scoring = piece.kind === "variable" ? "continuous" : (piece.scoring ?? "continuous");
       if (scoring === "distance") perf.distance = { absolute: { value: workDist, unit: "m" } };
       else if (scoring === "time") perf.time = { absolute: { value: workSec, unit: "s" } };
       else {
@@ -203,8 +238,15 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
 
     if (avgHr) {
       records.push({
-        id: `${sid}-hr`, recordType: "Measurement", subject, type: "heart_rate_mean",
-        quantity: avgHr, unit: "/min", startTime: start, endTime: end, provenance: prov,
+        id: `${sid}-hr`,
+        recordType: "Measurement",
+        subject,
+        type: "heart_rate_mean",
+        quantity: avgHr,
+        unit: "/min",
+        startTime: start,
+        endTime: end,
+        provenance: prov,
       });
       session.links = [{ type: "measuredBy", ref: `${sid}-hr` }];
     }

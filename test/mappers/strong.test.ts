@@ -14,10 +14,9 @@ describe("mapStrong", () => {
 
   it("maps the wall-clock window timezone-independently", () => {
     const strong = mapStrong(strongCsv);
-    expect(
-      `${strong[0]?.startTime}..${strong[0]?.endTime}`,
-      "want 18:00Z..19:00Z regardless of host TZ",
-    ).toBe("2025-12-20T18:00:00Z..2025-12-20T19:00:00Z");
+    expect(`${strong[0]?.startTime}..${strong[0]?.endTime}`, "want 18:00Z..19:00Z regardless of host TZ").toBe(
+      "2025-12-20T18:00:00Z..2025-12-20T19:00:00Z",
+    );
   });
 
   // Content-derived ids: prepending one more workout to the export must not
@@ -36,7 +35,7 @@ describe("mapStrong", () => {
   // "Bench Press (Barbell)" must land on the same canonical id as Hevy's spelling.
   it("resolves exercise names to canonical ids (cross-app convergence)", () => {
     const refs = mapStrong(strongCsv)
-      .flatMap((s) => [...(s.exercises ?? []), ...((s.blocks ?? []).flatMap((b: any) => b.children ?? []))])
+      .flatMap((s) => [...(s.exercises ?? []), ...(s.blocks ?? []).flatMap((b: any) => b.children ?? [])])
       .map((e: any) => e.exerciseRef);
     const bench = refs.find((r: any) => r.opaque === "Bench Press (Barbell)");
     expect(bench?.id).toBe("bench-press.barbell.flat");
@@ -47,7 +46,9 @@ describe("mapStrong", () => {
       expect(mapStrong("")).toEqual([]);
     });
     it("header-only CSV maps to []", () => {
-      expect(mapStrong("Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No\n")).toEqual([]);
+      expect(
+        mapStrong("Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No\n"),
+      ).toEqual([]);
     });
     // Current behavior: a row with no Date column reaches Date arithmetic on an empty
     // string and throws a raw RangeError. Pinned as-is; a typed-error pass comes later.

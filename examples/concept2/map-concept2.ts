@@ -18,7 +18,10 @@ console.log("Interval Session JSON (wire form):\n" + JSON.stringify(intervals, n
 let bad = 0;
 for (const rec of records) {
   const v = validate(rec);
-  if (!v.valid) { bad++; console.log(`  FAIL wire ${rec.recordType} ${rec.id}: ${v.errors}`); }
+  if (!v.valid) {
+    bad++;
+    console.log(`  FAIL wire ${rec.recordType} ${rec.id}: ${v.errors}`);
+  }
 }
 console.log(bad ? `${bad} wire record(s) invalid` : `All ${records.length} wire record(s) validate.`);
 

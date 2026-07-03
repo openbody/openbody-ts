@@ -5,7 +5,10 @@ import { LosslessNumber } from "./parse.js";
 const canonicalize = canonicalizeMod as unknown as (v: unknown) => string | undefined;
 
 export type Json = null | boolean | string | number | Json[] | { [k: string]: Json };
-export interface FixedPoint { coefficient: string; exponent: string }
+export interface FixedPoint {
+  coefficient: string;
+  exponent: string;
+}
 
 const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"]);
 
@@ -19,9 +22,7 @@ const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"])
  * as `LosslessNumber`; the plain-number path can lose precision above 2^53 or for
  * high-precision decimals.
  */
-export function canonNumber(
-  n: number | LosslessNumber | { coefficient: unknown; exponent: unknown },
-): FixedPoint {
+export function canonNumber(n: number | LosslessNumber | { coefficient: unknown; exponent: unknown }): FixedPoint {
   let coeff: bigint;
   let exp: number;
   if (n instanceof LosslessNumber) {
@@ -35,7 +36,10 @@ export function canonNumber(
   if (coeff === 0n) return { coefficient: "0", exponent: "0" };
   const negative = coeff < 0n;
   if (negative) coeff = -coeff;
-  while (coeff % 10n === 0n) { coeff /= 10n; exp += 1; }
+  while (coeff % 10n === 0n) {
+    coeff /= 10n;
+    exp += 1;
+  }
   return { coefficient: (negative ? "-" : "") + coeff.toString(), exponent: String(exp) };
 }
 
@@ -43,16 +47,27 @@ function decimalParts(s: string): [bigint, number] {
   s = s.trim();
   let exp = 0;
   const e = s.search(/[eE]/);
-  if (e >= 0) { exp = parseInt(s.slice(e + 1), 10); s = s.slice(0, e); }
+  if (e >= 0) {
+    exp = parseInt(s.slice(e + 1), 10);
+    s = s.slice(0, e);
+  }
   const dot = s.indexOf(".");
-  if (dot >= 0) { exp -= s.length - dot - 1; s = s.slice(0, dot) + s.slice(dot + 1); }
+  if (dot >= 0) {
+    exp -= s.length - dot - 1;
+    s = s.slice(0, dot) + s.slice(dot + 1);
+  }
   return [BigInt(s), exp];
 }
 
 export function isFixedPointLike(v: unknown): boolean {
-  return !!v && typeof v === "object" && !Array.isArray(v)
-    && "coefficient" in (v as any) && "exponent" in (v as any)
-    && Object.keys(v as any).length === 2;
+  return (
+    !!v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    "coefficient" in (v as any) &&
+    "exponent" in (v as any) &&
+    Object.keys(v as any).length === 2
+  );
 }
 
 /** Step 1 (timestamps): canonical RFC 3339 spelling (EQUIVALENCE.md step 1). */
@@ -85,7 +100,8 @@ export function deepCanon(value: unknown, inOpaque = false): Json {
     const out: Record<string, Json> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       const childOpaque = inOpaque || OPAQUE_KEYS.has(k);
-      out[k] = (!inOpaque && typeof v === "string" && TIMESTAMP_FIELDS.has(k)) ? canonTimestamp(v) : deepCanon(v, childOpaque);
+      out[k] =
+        !inOpaque && typeof v === "string" && TIMESTAMP_FIELDS.has(k) ? canonTimestamp(v) : deepCanon(v, childOpaque);
     }
     return out;
   }

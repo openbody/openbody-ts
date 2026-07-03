@@ -6,16 +6,24 @@ import { contentHash, num, parseCsv, toRfc3339 } from "../src/mappers/csv.js";
 
 describe("parseCsv", () => {
   it("parses plain rows into header-keyed records", () => {
-    expect(parseCsv("a,b\n1,2\n3,4")).toEqual([{ a: "1", b: "2" }, { a: "3", b: "4" }]);
+    expect(parseCsv("a,b\n1,2\n3,4")).toEqual([
+      { a: "1", b: "2" },
+      { a: "3", b: "4" },
+    ]);
   });
   it("handles quoted commas", () => {
     expect(parseCsv('name,notes\nSquat,"heavy, slow"')).toEqual([{ name: "Squat", notes: "heavy, slow" }]);
   });
   it("handles embedded newlines inside quoted cells", () => {
-    expect(parseCsv('name,notes\nSquat,"line one\nline two"')).toEqual([{ name: "Squat", notes: "line one\nline two" }]);
+    expect(parseCsv('name,notes\nSquat,"line one\nline two"')).toEqual([
+      { name: "Squat", notes: "line one\nline two" },
+    ]);
   });
   it("handles CRLF line endings", () => {
-    expect(parseCsv("a,b\r\n1,2\r\n3,4\r\n")).toEqual([{ a: "1", b: "2" }, { a: "3", b: "4" }]);
+    expect(parseCsv("a,b\r\n1,2\r\n3,4\r\n")).toEqual([
+      { a: "1", b: "2" },
+      { a: "3", b: "4" },
+    ]);
   });
   it("handles escaped quotes (doubled)", () => {
     expect(parseCsv('a\n"say ""hi"""')).toEqual([{ a: 'say "hi"' }]);

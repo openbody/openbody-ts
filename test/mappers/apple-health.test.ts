@@ -18,13 +18,16 @@ describe("mapAppleHealth", () => {
     const sessions = records.filter((r) => r.recordType === "Session");
     expect(sessions.length).toBeGreaterThan(0);
     for (const s of sessions) {
-      const ws = Date.parse(s.startTime), we = Date.parse(s.endTime);
+      const ws = Date.parse(s.startTime),
+        we = Date.parse(s.endTime);
       const refs = (s.workUnits?.[0]?.links ?? []).filter((l: any) => l.type === "measuredBy").map((l: any) => l.ref);
       for (const ref of refs) {
         const m = records.find((r) => r.id === ref);
         expect(m, `dangling measuredBy → ${ref}`).toBeDefined();
-        expect(Date.parse(m?.startTime) >= ws && Date.parse(m?.endTime) <= we,
-          `${ref} window outside workout ${s.id}`).toBe(true);
+        expect(
+          Date.parse(m?.startTime) >= ws && Date.parse(m?.endTime) <= we,
+          `${ref} window outside workout ${s.id}`,
+        ).toBe(true);
       }
     }
   });
@@ -34,7 +37,7 @@ describe("mapAppleHealth", () => {
       expect(mapAppleHealth("")).toEqual([]);
     });
     it("XML without Record/Workout elements maps to []", () => {
-      expect(mapAppleHealth("<HealthData><ExportDate value=\"x\"/></HealthData>")).toEqual([]);
+      expect(mapAppleHealth('<HealthData><ExportDate value="x"/></HealthData>')).toEqual([]);
     });
   });
 });

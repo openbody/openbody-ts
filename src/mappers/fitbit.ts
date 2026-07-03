@@ -38,7 +38,10 @@
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
 import type { OpenBodyRecord, MapOptions } from "../types.js";
 
-export interface FitbitFile { name: string; text: string }
+export interface FitbitFile {
+  name: string;
+  text: string;
+}
 export interface FitbitMapOptions extends MapOptions {
   /** RFC 3339 offset for Takeout's offset-less local timestamps (e.g. "-07:00"). Default "Z". Not applied to heart_rate files (documented UTC). */
   utcOffset?: string;
@@ -46,19 +49,41 @@ export interface FitbitMapOptions extends MapOptions {
 
 // activityName → canonical discipline token (registry vocab/disciplines.json); namespaced fallback.
 const DISC: Record<string, string> = {
-  run: "running", running: "running", treadmill: "running", walk: "walking", walking: "walking",
-  bike: "cycling", "outdoor bike": "cycling", spinning: "cycling", swim: "swimming", swimming: "swimming",
-  hike: "hiking", hiking: "hiking", yoga: "yoga", pilates: "pilates", weights: "strength",
-  "weight training": "strength", rowing: "rowing", "rowing machine": "rowing", tennis: "tennis",
+  run: "running",
+  running: "running",
+  treadmill: "running",
+  walk: "walking",
+  walking: "walking",
+  bike: "cycling",
+  "outdoor bike": "cycling",
+  spinning: "cycling",
+  swim: "swimming",
+  swimming: "swimming",
+  hike: "hiking",
+  hiking: "hiking",
+  yoga: "yoga",
+  pilates: "pilates",
+  weights: "strength",
+  "weight training": "strength",
+  rowing: "rowing",
+  "rowing machine": "rowing",
+  tennis: "tennis",
 };
-const disciplineFor = (name: string) =>
-  DISC[name.toLowerCase()] ?? `fitbit:${name.toLowerCase().replace(/\s+/g, "_")}`;
+const disciplineFor = (name: string) => DISC[name.toLowerCase()] ?? `fitbit:${name.toLowerCase().replace(/\s+/g, "_")}`;
 
 const DIST_UNIT: Record<string, string> = { Kilometer: "km", Mile: "[mi_i]", Meter: "m", Foot: "[ft_i]" };
 
 // levels.data `level` → sleep_stage category, consistent with the measurement-type registry's
 // sleep tokens (sleep_deep/sleep_light/sleep_rem/sleep_awake); "classic" logs pass through.
-const STAGE: Record<string, string> = { deep: "deep", light: "light", rem: "rem", wake: "awake", asleep: "asleep", restless: "restless", awake: "awake" };
+const STAGE: Record<string, string> = {
+  deep: "deep",
+  light: "light",
+  rem: "rem",
+  wake: "awake",
+  asleep: "asleep",
+  restless: "restless",
+  awake: "awake",
+};
 
 // "MM/DD/YY HH:MM:SS" → local ISO "20YY-MM-DDTHH:MM:SS" (no offset yet).
 const usToIso = (s: string): string | undefined => {
@@ -74,11 +99,18 @@ const fixed = (n: number): number | { coefficient: number; exponent: number } =>
   const s = String(n);
   if (!/^-?\d+(\.\d+)?$/.test(s)) return n;
   const dot = s.indexOf(".");
-  return dot < 0 ? { coefficient: n, exponent: 0 } : { coefficient: Number(s.replace(".", "")), exponent: dot + 1 - s.length };
+  return dot < 0
+    ? { coefficient: n, exponent: 0 }
+    : { coefficient: Number(s.replace(".", "")), exponent: dot + 1 - s.length };
 };
 
 const parseArray = (text: string): Record<string, any>[] => {
-  try { const v = JSON.parse(text); return Array.isArray(v) ? v : []; } catch { return []; }
+  try {
+    const v = JSON.parse(text);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
 };
 const basename = (name: string) => name.split("/").pop() ?? name;
 
@@ -89,7 +121,11 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
   const records: OpenBodyRecord[] = [];
   const prov = (method: string) => ({ method, sourceApp: "fitbit" });
   // §7.4: derived summaries Fitbit computed on-device/server; version is not published.
-  const summaryAlg = (name: string) => ({ method: "algorithm", sourceApp: "fitbit", algorithm: { name, version: "takeout" } });
+  const summaryAlg = (name: string) => ({
+    method: "algorithm",
+    sourceApp: "fitbit",
+    algorithm: { name, version: "takeout" },
+  });
 
   // Intraday per-minute/per-second entries accumulate across files, then emit one
   // sampleArray per calendar day (§4.3) — point-by-point records would not scale.
@@ -109,10 +145,15 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
       if (first === undefined) continue; // unreachable: buckets are created non-empty
       const last = ens[ens.length - 1] ?? first;
       records.push({
-        id: `fitbit-${kind === "steps" ? "steps" : "hr"}-${day}`, recordType: "Measurement", subject,
-        type: kind === "steps" ? "step_count" : "heart_rate", unit: kind === "steps" ? "1" : "/min",
+        id: `fitbit-${kind === "steps" ? "steps" : "hr"}-${day}`,
+        recordType: "Measurement",
+        subject,
+        type: kind === "steps" ? "step_count" : "heart_rate",
+        unit: kind === "steps" ? "1" : "/min",
         sampleArray: { offsets: ens.map((x) => (x.e - first.e) / 1000), dataPoints: ens.map((x) => x.v) },
-        startTime: first.iso + tzOff, endTime: last.iso + tzOff, provenance: prov("sensor"),
+        startTime: first.iso + tzOff,
+        endTime: last.iso + tzOff,
+        provenance: prov("sensor"),
       });
     }
   };
@@ -124,17 +165,36 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         const startIso = usToIso(String(x.startTime ?? ""));
         if (x.logId == null || !startIso) continue;
         const durMs = Number(x.activeDuration ?? x.duration ?? 0);
-        const start = startIso + off, end = isoAt(epoch(startIso) + durMs) + off;
+        const start = startIso + off,
+          end = isoAt(epoch(startIso) + durMs) + off;
         const sid = `fitbit-ex-${x.logId}`;
         const measuredBy: { type: string; ref: string }[] = [];
         if (x.averageHeartRate != null) {
-          records.push({ id: `${sid}-hr-mean`, recordType: "Measurement", subject, type: "heart_rate_mean",
-            quantity: x.averageHeartRate, unit: "/min", startTime: start, endTime: end, provenance: summaryAlg("fitbit-activity-summary") });
+          records.push({
+            id: `${sid}-hr-mean`,
+            recordType: "Measurement",
+            subject,
+            type: "heart_rate_mean",
+            quantity: x.averageHeartRate,
+            unit: "/min",
+            startTime: start,
+            endTime: end,
+            provenance: summaryAlg("fitbit-activity-summary"),
+          });
           measuredBy.push({ type: "measuredBy", ref: `${sid}-hr-mean` });
         }
         if (x.steps != null) {
-          records.push({ id: `${sid}-steps`, recordType: "Measurement", subject, type: "step_count",
-            quantity: x.steps, unit: "1", startTime: start, endTime: end, provenance: prov("sensor") });
+          records.push({
+            id: `${sid}-steps`,
+            recordType: "Measurement",
+            subject,
+            type: "step_count",
+            quantity: x.steps,
+            unit: "1",
+            startTime: start,
+            endTime: end,
+            provenance: prov("sensor"),
+          });
           measuredBy.push({ type: "measuredBy", ref: `${sid}-steps` });
         }
         const extra: Record<string, any> = {};
@@ -144,19 +204,35 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
           // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
           // value+unit pair rides the extension.fitbit residue rail instead.
           if (unit) perf.distance = { absolute: { value: x.distance, unit } };
-          else { extra.distance = x.distance; if (x.distanceUnit != null) extra.distanceUnit = x.distanceUnit; }
+          else {
+            extra.distance = x.distance;
+            if (x.distanceUnit != null) extra.distanceUnit = x.distanceUnit;
+          }
         }
         if (x.calories != null) perf.energy = { absolute: { value: x.calories, unit: "kcal" } };
         if (Array.isArray(x.heartRateZones) && x.heartRateZones.length) extra.heartRateZones = x.heartRateZones;
         if (Array.isArray(x.activityLevel) && x.activityLevel.length) extra.activityLevel = x.activityLevel;
         if (x.elevationGain != null) extra.elevationGain = x.elevationGain;
         records.push({
-          id: sid, recordType: "Session", subject, clientRecordId: String(x.logId),
-          disciplines: [disciplineFor(String(x.activityName ?? "unknown"))], intent: "train",
-          startTime: start, endTime: end, provenance: prov(x.logType === "manual" ? "manual" : "sensor"),
+          id: sid,
+          recordType: "Session",
+          subject,
+          clientRecordId: String(x.logId),
+          disciplines: [disciplineFor(String(x.activityName ?? "unknown"))],
+          intent: "train",
+          startTime: start,
+          endTime: end,
+          provenance: prov(x.logType === "manual" ? "manual" : "sensor"),
           ...(Object.keys(extra).length ? { extension: { fitbit: extra } } : {}),
-          workUnits: [{ id: `${sid}-wu`, recordType: "WorkUnit", scoring: "continuous", performance: perf,
-            ...(measuredBy.length ? { links: measuredBy } : {}) }],
+          workUnits: [
+            {
+              id: `${sid}-wu`,
+              recordType: "WorkUnit",
+              scoring: "continuous",
+              performance: perf,
+              ...(measuredBy.length ? { links: measuredBy } : {}),
+            },
+          ],
         });
       }
     } else if (/^steps-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
@@ -174,43 +250,81 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         if (log.logId == null || !log.startTime) continue;
         const lid = `fitbit-sleep-${log.logId}`;
         const start = stripFrac(String(log.startTime)) + off;
-        const end = log.endTime ? stripFrac(String(log.endTime)) + off : isoAt(epoch(String(log.startTime)) + Number(log.duration ?? 0)) + off;
+        const end = log.endTime
+          ? stripFrac(String(log.endTime)) + off
+          : isoAt(epoch(String(log.startTime)) + Number(log.duration ?? 0)) + off;
         // §4.3: a night of stages = multiple category Measurements over ADJACENT intervals.
         // levels.data is the contiguous timeline; levels.shortData (stages logs only) holds
         // short (≤3 min) wakes that OVERLAP it — physiologically real wakes, so splice them
         // in: punch each short wake out of the underlying stage and insert an awake interval.
         let segs: { s: number; e: number; level: string }[] = (log.levels?.data ?? [])
-          .map((d: any) => { const s = epoch(String(d.dateTime)); return { s, e: s + Number(d.seconds) * 1000, level: String(d.level) }; })
+          .map((d: any) => {
+            const s = epoch(String(d.dateTime));
+            return { s, e: s + Number(d.seconds) * 1000, level: String(d.level) };
+          })
           .filter((g: any) => Number.isFinite(g.s) && g.e > g.s)
           .sort((a: any, b: any) => a.s - b.s);
         for (const sd of log.levels?.shortData ?? []) {
-          const s = epoch(String(sd.dateTime)), e = s + Number(sd.seconds) * 1000;
+          const s = epoch(String(sd.dateTime)),
+            e = s + Number(sd.seconds) * 1000;
           if (!Number.isFinite(s) || e <= s) continue;
           const next: typeof segs = [{ s, e, level: String(sd.level) }];
           for (const g of segs) {
-            if (e <= g.s || s >= g.e) { next.push(g); continue; }
+            if (e <= g.s || s >= g.e) {
+              next.push(g);
+              continue;
+            }
             if (g.s < s) next.push({ s: g.s, e: s, level: g.level });
             if (e < g.e) next.push({ s: e, e: g.e, level: g.level });
           }
           segs = next.sort((a, b) => a.s - b.s);
         }
-        segs.forEach((g, i) => records.push({
-          id: `${lid}-s${i}`, recordType: "Measurement", subject, type: "sleep_stage",
-          category: STAGE[g.level] ?? g.level, startTime: isoAt(g.s) + off, endTime: isoAt(g.e) + off, provenance: prov("sensor"),
-        }));
+        segs.forEach((g, i) =>
+          records.push({
+            id: `${lid}-s${i}`,
+            recordType: "Measurement",
+            subject,
+            type: "sleep_stage",
+            category: STAGE[g.level] ?? g.level,
+            startTime: isoAt(g.s) + off,
+            endTime: isoAt(g.e) + off,
+            provenance: prov("sensor"),
+          }),
+        );
         // Fitbit-computed summaries → registry sleep duration tokens (quantity over the window).
-        if (log.minutesAsleep != null) records.push({
-          id: `${lid}-duration`, recordType: "Measurement", subject, clientRecordId: String(log.logId),
-          type: "sleep_duration", quantity: log.minutesAsleep, unit: "min",
-          startTime: start, endTime: end, provenance: summaryAlg("fitbit-sleep-summary"),
-        });
-        const SUMMARY: Record<string, string> = { deep: "sleep_deep", light: "sleep_light", rem: "sleep_rem", wake: "sleep_awake" };
+        if (log.minutesAsleep != null)
+          records.push({
+            id: `${lid}-duration`,
+            recordType: "Measurement",
+            subject,
+            clientRecordId: String(log.logId),
+            type: "sleep_duration",
+            quantity: log.minutesAsleep,
+            unit: "min",
+            startTime: start,
+            endTime: end,
+            provenance: summaryAlg("fitbit-sleep-summary"),
+          });
+        const SUMMARY: Record<string, string> = {
+          deep: "sleep_deep",
+          light: "sleep_light",
+          rem: "sleep_rem",
+          wake: "sleep_awake",
+        };
         for (const [k, type] of Object.entries(SUMMARY)) {
           const mins = log.levels?.summary?.[k]?.minutes;
-          if (mins != null) records.push({
-            id: `${lid}-${k}`, recordType: "Measurement", subject, type, quantity: mins, unit: "min",
-            startTime: start, endTime: end, provenance: summaryAlg("fitbit-sleep-summary"),
-          });
+          if (mins != null)
+            records.push({
+              id: `${lid}-${k}`,
+              recordType: "Measurement",
+              subject,
+              type,
+              quantity: mins,
+              unit: "min",
+              startTime: start,
+              endTime: end,
+              provenance: summaryAlg("fitbit-sleep-summary"),
+            });
         }
       }
     } else if (/^weight-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
@@ -221,13 +335,47 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         // Takeout weight is exported in pounds regardless of profile units (community-
         // documented); kept as UCUM [lb_av] rather than converted — lossless per §4.2.
         const aria = typeof x.source === "string" && x.source.toLowerCase() === "aria";
-        const p = { method: aria ? "sensor" : "manual", sourceApp: "fitbit", ...(aria ? { device: { manufacturer: "fitbit", model: x.source } } : {}) };
-        records.push({ id: `fitbit-weight-${x.logId}`, recordType: "Measurement", subject, clientRecordId: String(x.logId),
-          type: "body_mass", quantity: fixed(Number(x.weight)), unit: "[lb_av]", startTime: t, endTime: t, provenance: p });
-        if (x.bmi != null) records.push({ id: `fitbit-weight-${x.logId}-bmi`, recordType: "Measurement", subject,
-          type: "bmi", quantity: fixed(Number(x.bmi)), unit: "kg/m2", startTime: t, endTime: t, provenance: p });
-        if (x.fat != null) records.push({ id: `fitbit-weight-${x.logId}-fat`, recordType: "Measurement", subject,
-          type: "body_fat_percentage", quantity: fixed(Number(x.fat)), unit: "%", startTime: t, endTime: t, provenance: p });
+        const p = {
+          method: aria ? "sensor" : "manual",
+          sourceApp: "fitbit",
+          ...(aria ? { device: { manufacturer: "fitbit", model: x.source } } : {}),
+        };
+        records.push({
+          id: `fitbit-weight-${x.logId}`,
+          recordType: "Measurement",
+          subject,
+          clientRecordId: String(x.logId),
+          type: "body_mass",
+          quantity: fixed(Number(x.weight)),
+          unit: "[lb_av]",
+          startTime: t,
+          endTime: t,
+          provenance: p,
+        });
+        if (x.bmi != null)
+          records.push({
+            id: `fitbit-weight-${x.logId}-bmi`,
+            recordType: "Measurement",
+            subject,
+            type: "bmi",
+            quantity: fixed(Number(x.bmi)),
+            unit: "kg/m2",
+            startTime: t,
+            endTime: t,
+            provenance: p,
+          });
+        if (x.fat != null)
+          records.push({
+            id: `fitbit-weight-${x.logId}-fat`,
+            recordType: "Measurement",
+            subject,
+            type: "body_fat_percentage",
+            quantity: fixed(Number(x.fat)),
+            unit: "%",
+            startTime: t,
+            endTime: t,
+            provenance: p,
+          });
       }
     } else if (/^resting_heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
       for (const x of parseArray(f.text)) {
@@ -236,8 +384,14 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         if (!iso || v == null || v === 0) continue; // days without data export as 0
         const day = iso.slice(0, 10);
         records.push({
-          id: `fitbit-rhr-${day}`, recordType: "Measurement", subject, type: "resting_heart_rate",
-          quantity: v, unit: "/min", startTime: `${day}T00:00:00${off}`, endTime: isoAt(epoch(`${day}T00:00:00`) + 86400000) + off,
+          id: `fitbit-rhr-${day}`,
+          recordType: "Measurement",
+          subject,
+          type: "resting_heart_rate",
+          quantity: v,
+          unit: "/min",
+          startTime: `${day}T00:00:00${off}`,
+          endTime: isoAt(epoch(`${day}T00:00:00`) + 86400000) + off,
           provenance: prov("estimated"), // Fitbit RHR is a model estimate (the export carries an `error` term)
         });
       }

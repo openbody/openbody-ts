@@ -18,28 +18,67 @@
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
 import type { OpenBodyRecord, MapOptions } from "../types.js";
 
-interface DecodedRecord { timestamp: string; position_lat?: number; position_long?: number; altitude?: number; heart_rate?: number; power?: number; cadence?: number; }
-interface DecodedLap { timestamp: string; start_time?: string; total_elapsed_time?: number; total_distance?: number; total_calories?: number; }
-interface DecodedSession {
-  start_time: string; sport?: string; total_elapsed_time?: number; total_distance?: number;
-  total_calories?: number; avg_heart_rate?: number; max_heart_rate?: number; avg_power?: number; max_power?: number;
+interface DecodedRecord {
+  timestamp: string;
+  position_lat?: number;
+  position_long?: number;
+  altitude?: number;
+  heart_rate?: number;
+  power?: number;
+  cadence?: number;
 }
-interface DecodedWorkout { wkt_name?: string; sport?: string; num_valid_steps?: number; }
+interface DecodedLap {
+  timestamp: string;
+  start_time?: string;
+  total_elapsed_time?: number;
+  total_distance?: number;
+  total_calories?: number;
+}
+interface DecodedSession {
+  start_time: string;
+  sport?: string;
+  total_elapsed_time?: number;
+  total_distance?: number;
+  total_calories?: number;
+  avg_heart_rate?: number;
+  max_heart_rate?: number;
+  avg_power?: number;
+  max_power?: number;
+}
+interface DecodedWorkout {
+  wkt_name?: string;
+  sport?: string;
+  num_valid_steps?: number;
+}
 interface DecodedWorkoutStep {
   message_index: { value: number } | number;
   wkt_step_name?: string;
-  duration_type?: string; duration_value?: number;
-  target_type?: string; target_value?: number;
-  custom_target_value_low?: number; custom_target_value_high?: number;
+  duration_type?: string;
+  duration_value?: number;
+  target_type?: string;
+  target_value?: number;
+  custom_target_value_low?: number;
+  custom_target_value_high?: number;
   intensity?: string;
 }
 /** The decode shape this mapper expects — matches `fit-file-parser`'s `mode: "list"` output. */
 export interface FitInput {
-  sessions?: DecodedSession[]; laps?: DecodedLap[]; records?: DecodedRecord[];
-  workouts?: DecodedWorkout[]; workout_steps?: DecodedWorkoutStep[];
+  sessions?: DecodedSession[];
+  laps?: DecodedLap[];
+  records?: DecodedRecord[];
+  workouts?: DecodedWorkout[];
+  workout_steps?: DecodedWorkoutStep[];
 }
 
-const SPORT: Record<string, string> = { running: "running", cycling: "cycling", swimming: "swimming", walking: "walking", hiking: "hiking", rowing: "rowing", training: "strength" };
+const SPORT: Record<string, string> = {
+  running: "running",
+  cycling: "cycling",
+  swimming: "swimming",
+  walking: "walking",
+  hiking: "hiking",
+  rowing: "rowing",
+  training: "strength",
+};
 const disciplineFor = (sport?: string) => (sport && SPORT[sport]) || `fit:${sport ?? "generic"}`;
 
 const indexOf = (mi: DecodedWorkoutStep["message_index"]) => (typeof mi === "number" ? mi : mi.value);
@@ -58,14 +97,15 @@ const INTENSITY_DIM: Record<string, { dimension: string; unit: string }> = {
 // analog (a step's *structural* position in the workout) for the two tokens the core vocab
 // already names. Anything else round-trips source-namespaced, same pattern as `apple-health.ts`.
 const SET_ROLE: Record<string, string> = { active: "working", warmup: "warmup" };
-const setRoleFor = (intensity?: string) => (intensity ? SET_ROLE[intensity] ?? `fit:${intensity}` : undefined);
+const setRoleFor = (intensity?: string) => (intensity ? (SET_ROLE[intensity] ?? `fit:${intensity}`) : undefined);
 
 // duration_type values that mean "repeat the preceding step range," not a real training step —
 // `duration_value` holds the message_index to loop back to, `target_value` the repeat count.
 const REPEAT_DURATION = /^repeat_until_/;
 
 function targetValue(step: DecodedWorkoutStep): OpenBodyRecord | undefined {
-  const low = step.custom_target_value_low, high = step.custom_target_value_high;
+  const low = step.custom_target_value_low,
+    high = step.custom_target_value_high;
   if (low != null && high != null) {
     // SPEC.md's own Zwift crosswalk (Warmup/Cooldown/Ramp → Intensity.value `ramp`) is the
     // precedent: a warmup/cooldown step's target band is directional, not a plain range.
@@ -84,16 +124,32 @@ function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): OpenBodyRecord {
 
   const prescription: OpenBodyRecord = {};
   switch (step.duration_type) {
-    case "distance": wu.scoring = "distance"; prescription.distance = { absolute: { value: step.duration_value, unit: "m" } }; break;
-    case "reps": wu.scoring = "reps"; prescription.reps = step.duration_value; break;
-    case "calories": wu.scoring = "energy"; prescription.energy = { absolute: { value: step.duration_value, unit: "kcal" } }; break;
-    case "open": wu.scoring = "time"; prescription.time = { stopCondition: { kind: "open" } }; break;
-    case "time": wu.scoring = "time"; prescription.time = { absolute: { value: step.duration_value, unit: "s" } }; break;
+    case "distance":
+      wu.scoring = "distance";
+      prescription.distance = { absolute: { value: step.duration_value, unit: "m" } };
+      break;
+    case "reps":
+      wu.scoring = "reps";
+      prescription.reps = step.duration_value;
+      break;
+    case "calories":
+      wu.scoring = "energy";
+      prescription.energy = { absolute: { value: step.duration_value, unit: "kcal" } };
+      break;
+    case "open":
+      wu.scoring = "time";
+      prescription.time = { stopCondition: { kind: "open" } };
+      break;
+    case "time":
+      wu.scoring = "time";
+      prescription.time = { absolute: { value: step.duration_value, unit: "s" } };
+      break;
     default:
       // Exotic conditional-stop durations (hr_less_than, power_greater_than, …): rare in
       // practice. Canonical-plus-residue (per the mapping guide's principles): degrade to a
       // valid, generically-scored WorkUnit and preserve the raw FIT condition losslessly.
-      wu.scoring = "continuous"; prescription.time = { stopCondition: { kind: "open" } };
+      wu.scoring = "continuous";
+      prescription.time = { stopCondition: { kind: "open" } };
       wu.extension = { fit: { duration_type: step.duration_type } };
   }
 
@@ -121,23 +177,35 @@ function mapWorkout(data: FitInput, subject: string): OpenBodyRecord[] {
         entries.pop();
         group.unshift(last.record);
       }
-      entries.push({ record: { id: `fit-wkt-blk-${idx}`, recordType: "Block", repetitions: rounds, children: group }, minIdx: startIdx });
+      entries.push({
+        record: { id: `fit-wkt-blk-${idx}`, recordType: "Block", repetitions: rounds, children: group },
+        minIdx: startIdx,
+      });
     } else {
       // WorkUnit has no `name` field — a step's name is structural (§5.3), so it lives on
       // the single-child Block wrapping each step, not the WorkUnit itself.
-      const block: OpenBodyRecord = { id: `fit-wkt-blk-${idx}`, recordType: "Block", children: [stepToWorkUnit(step, idx)] };
+      const block: OpenBodyRecord = {
+        id: `fit-wkt-blk-${idx}`,
+        recordType: "Block",
+        children: [stepToWorkUnit(step, idx)],
+      };
       if (step.wkt_step_name) block.name = step.wkt_step_name;
       entries.push({ record: block, minIdx: idx });
     }
   }
 
-  return [{
-    id: "fit-wkt", recordType: "Session", subject,
-    ...(wkt?.wkt_name ? { name: wkt.wkt_name } : {}),
-    disciplines: [disciplineFor(wkt?.sport)], intent: "train",
-    provenance: { method: "manual", sourceApp: "fit" },
-    blocks: entries.map((e) => e.record),
-  }];
+  return [
+    {
+      id: "fit-wkt",
+      recordType: "Session",
+      subject,
+      ...(wkt?.wkt_name ? { name: wkt.wkt_name } : {}),
+      disciplines: [disciplineFor(wkt?.sport)],
+      intent: "train",
+      provenance: { method: "manual", sourceApp: "fit" },
+      blocks: entries.map((e) => e.record),
+    },
+  ];
 }
 
 function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
@@ -147,7 +215,9 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   // `start` is defined on every path that reads it: `s` guarantees start_time, and the
   // offsets map only runs over records that exist (records[0] then supplied `start`).
   const t0 = start !== undefined ? new Date(start).getTime() : NaN;
-  const end = s ? new Date(t0 + (s.total_elapsed_time ?? 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : records[records.length - 1]?.timestamp;
+  const end = s
+    ? new Date(t0 + (s.total_elapsed_time ?? 0) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z")
+    : records[records.length - 1]?.timestamp;
   const offsets = records.map((r) => (new Date(r.timestamp).getTime() - t0) / 1000);
   const prov = (method: string) => ({ method, sourceApp: "fit" });
 
@@ -156,7 +226,17 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   const scalarStream = (id: string, type: string, unit: string, pick: (r: DecodedRecord) => number | undefined) => {
     const data_ = records.map((r) => pick(r) ?? null);
     if (data_.every((v) => v === null)) return;
-    out.push({ id, recordType: "Measurement", subject, type, unit, sampleArray: { offsets, dataPoints: data_ }, startTime: start, endTime: end, provenance: prov("sensor") });
+    out.push({
+      id,
+      recordType: "Measurement",
+      subject,
+      type,
+      unit,
+      sampleArray: { offsets, dataPoints: data_ },
+      startTime: start,
+      endTime: end,
+      provenance: prov("sensor"),
+    });
     measuredBy.push({ type: "measuredBy", ref: id });
   };
   scalarStream("fit-hr", "heart_rate", "/min", (r) => r.heart_rate);
@@ -164,10 +244,22 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   scalarStream("fit-cadence", "cadence", "/min", (r) => r.cadence);
   if (records.some((r) => r.position_lat != null)) {
     out.push({
-      id: "fit-route", recordType: "Measurement", subject, type: "location",
-      sampleArray: { offsets, channels: [{ name: "lat", unit: "deg" }, { name: "lon", unit: "deg" }, { name: "alt", unit: "m" }],
-        dataPoints: records.map((r) => [r.position_lat ?? null, r.position_long ?? null, r.altitude ?? null]) },
-      startTime: start, endTime: end, provenance: prov("sensor"),
+      id: "fit-route",
+      recordType: "Measurement",
+      subject,
+      type: "location",
+      sampleArray: {
+        offsets,
+        channels: [
+          { name: "lat", unit: "deg" },
+          { name: "lon", unit: "deg" },
+          { name: "alt", unit: "m" },
+        ],
+        dataPoints: records.map((r) => [r.position_lat ?? null, r.position_long ?? null, r.altitude ?? null]),
+      },
+      startTime: start,
+      endTime: end,
+      provenance: prov("sensor"),
     });
     measuredBy.push({ type: "measuredBy", ref: "fit-route" });
   }
@@ -178,9 +270,15 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   if (s?.total_calories != null) perf.energy = { absolute: { value: s.total_calories, unit: "kcal" } };
 
   out.push({
-    id: "fit-session", recordType: "Session", subject,
-    disciplines: [disciplineFor(s?.sport)], intent: "train",
-    startTime: start, endTime: end, provenance: prov("sensor"), links: measuredBy,
+    id: "fit-session",
+    recordType: "Session",
+    subject,
+    disciplines: [disciplineFor(s?.sport)],
+    intent: "train",
+    startTime: start,
+    endTime: end,
+    provenance: prov("sensor"),
+    links: measuredBy,
     workUnits: [{ id: "fit-session-wu", recordType: "WorkUnit", scoring: "continuous", performance: perf }],
   });
   return out;

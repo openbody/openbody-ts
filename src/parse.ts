@@ -50,14 +50,30 @@ export function parseLossless(text: string): unknown {
       if (c === "\\") {
         const e = text[i++];
         switch (e) {
-          case '"': s += '"'; break;
-          case "\\": s += "\\"; break;
-          case "/": s += "/"; break;
-          case "b": s += "\b"; break;
-          case "f": s += "\f"; break;
-          case "n": s += "\n"; break;
-          case "r": s += "\r"; break;
-          case "t": s += "\t"; break;
+          case '"':
+            s += '"';
+            break;
+          case "\\":
+            s += "\\";
+            break;
+          case "/":
+            s += "/";
+            break;
+          case "b":
+            s += "\b";
+            break;
+          case "f":
+            s += "\f";
+            break;
+          case "n":
+            s += "\n";
+            break;
+          case "r":
+            s += "\r";
+            break;
+          case "t":
+            s += "\t";
+            break;
           case "u": {
             const hex = text.slice(i, i + 4);
             if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail("invalid \\u escape");
@@ -112,9 +128,18 @@ export function parseLossless(text: string): unknown {
     if (c === "[") return parseArray();
     if (c === '"') return parseString();
     if (c === "-" || isDigit(c)) return parseNumber();
-    if (text.startsWith("true", i)) { i += 4; return true; }
-    if (text.startsWith("false", i)) { i += 5; return false; }
-    if (text.startsWith("null", i)) { i += 4; return null; }
+    if (text.startsWith("true", i)) {
+      i += 4;
+      return true;
+    }
+    if (text.startsWith("false", i)) {
+      i += 5;
+      return false;
+    }
+    if (text.startsWith("null", i)) {
+      i += 4;
+      return null;
+    }
     return fail(`unexpected token ${JSON.stringify(c)}`);
   };
 
@@ -122,7 +147,10 @@ export function parseLossless(text: string): unknown {
     i++; // {
     const obj: Record<string, unknown> = {};
     skipWs();
-    if (text[i] === "}") { i++; return obj; }
+    if (text[i] === "}") {
+      i++;
+      return obj;
+    }
     for (;;) {
       skipWs();
       if (text[i] !== '"') fail("expected string key");
@@ -133,8 +161,14 @@ export function parseLossless(text: string): unknown {
       obj[key] = parseValue();
       skipWs();
       const c = text[i];
-      if (c === ",") { i++; continue; }
-      if (c === "}") { i++; break; }
+      if (c === ",") {
+        i++;
+        continue;
+      }
+      if (c === "}") {
+        i++;
+        break;
+      }
       fail("expected ',' or '}'");
     }
     return obj;
@@ -144,13 +178,22 @@ export function parseLossless(text: string): unknown {
     i++; // [
     const arr: unknown[] = [];
     skipWs();
-    if (text[i] === "]") { i++; return arr; }
+    if (text[i] === "]") {
+      i++;
+      return arr;
+    }
     for (;;) {
       arr.push(parseValue());
       skipWs();
       const c = text[i];
-      if (c === ",") { i++; continue; }
-      if (c === "]") { i++; break; }
+      if (c === ",") {
+        i++;
+        continue;
+      }
+      if (c === "]") {
+        i++;
+        break;
+      }
       fail("expected ',' or ']'");
     }
     return arr;

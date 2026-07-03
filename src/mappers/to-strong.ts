@@ -45,7 +45,20 @@ import { sourceNameForId } from "../resolve.js";
 import { LosslessNumber } from "../parse.js";
 import { canonNumber, isFixedPointLike } from "../canonical.js";
 
-const HEADER = ["Date", "Workout Name", "Duration", "Exercise Name", "Set Order", "Weight", "Reps", "Distance", "Seconds", "Notes", "Workout No", "RPE"];
+const HEADER = [
+  "Date",
+  "Workout Name",
+  "Duration",
+  "Exercise Name",
+  "Set Order",
+  "Weight",
+  "Reps",
+  "Distance",
+  "Seconds",
+  "Notes",
+  "Workout No",
+  "RPE",
+];
 
 /** One thing Strong's CSV could not represent (dropped or simplified). */
 export interface StrongOmission {
@@ -74,7 +87,10 @@ export interface ToStrongOptions extends MapOptions {
 // Strong's Date column has no offset concept.
 function toStrongDate(iso: string | undefined): string {
   if (!iso) return "";
-  return iso.replace("T", " ").replace(/\.\d+/, "").replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
+  return iso
+    .replace("T", " ")
+    .replace(/\.\d+/, "")
+    .replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
 }
 
 function csvEscape(v: string): string {
@@ -117,11 +133,21 @@ function decTimes(v: unknown, factor: string): string | undefined {
 
 // Exact decimal factors to Strong's column units (Weight: kg, Distance: m, Seconds: s).
 const MASS_TO_KG: Record<string, string> = {
-  kg: "1", g: "0.001", mg: "0.000001", "[lb_av]": "0.45359237", "[oz_av]": "0.028349523125",
+  kg: "1",
+  g: "0.001",
+  mg: "0.000001",
+  "[lb_av]": "0.45359237",
+  "[oz_av]": "0.028349523125",
 };
 const LENGTH_TO_M: Record<string, string> = {
-  m: "1", km: "1000", cm: "0.01", mm: "0.001",
-  "[mi_i]": "1609.344", "[yd_i]": "0.9144", "[ft_i]": "0.3048", "[in_i]": "0.0254",
+  m: "1",
+  km: "1000",
+  cm: "0.01",
+  mm: "0.001",
+  "[mi_i]": "1609.344",
+  "[yd_i]": "0.9144",
+  "[ft_i]": "0.3048",
+  "[in_i]": "0.0254",
 };
 const TIME_TO_S: Record<string, string> = { s: "1", min: "60", h: "3600", ms: "0.001" };
 
@@ -137,7 +163,10 @@ function scalarPart(v: any): { raw?: unknown; unit?: string; why?: string } {
     if ("range" in v) return { why: "a min–max range" };
     if ("relativeToThreshold" in v) {
       const r = v.relativeToThreshold ?? {};
-      const what = r.percent !== undefined ? `${r.percent}% of ${r.of ?? "a threshold"}` : `a band relative to ${r.of ?? "a threshold"}`;
+      const what =
+        r.percent !== undefined
+          ? `${r.percent}% of ${r.of ?? "a threshold"}`
+          : `a band relative to ${r.of ?? "a threshold"}`;
       return { why: `${what} (this mapper does not resolve ThresholdProfiles to an absolute value)` };
     }
     if ("stopCondition" in v) return { why: "a stop-condition (e.g. to failure), not a number" };
@@ -147,7 +176,12 @@ function scalarPart(v: any): { raw?: unknown; unit?: string; why?: string } {
 }
 
 /** Convert a metric value to a plain decimal string in `targetUnit` using `factors`. */
-function metricColumn(v: any, factors: Record<string, string>, defaultUnit: string, targetUnit: string): { out?: string; why?: string } {
+function metricColumn(
+  v: any,
+  factors: Record<string, string>,
+  defaultUnit: string,
+  targetUnit: string,
+): { out?: string; why?: string } {
   const p = scalarPart(v);
   if (p.why) return { why: `is ${p.why}` };
   if (p.raw === undefined) return {};
@@ -175,7 +209,9 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
   const omissions: StrongOmission[] = [];
   const omit = (recordId: string | undefined, field: string | undefined, reason: string) => {
     if (opts.strict) {
-      throw new Error(`mapOpenBodyToStrong (strict): ${reason} [record ${recordId ?? "?"}${field ? `, field ${field}` : ""}] — omit \`strict\` to degrade gracefully and get an omissions report instead`);
+      throw new Error(
+        `mapOpenBodyToStrong (strict): ${reason} [record ${recordId ?? "?"}${field ? `, field ${field}` : ""}] — omit \`strict\` to degrade gracefully and get an omissions report instead`,
+      );
     }
     omissions.push({ recordId: recordId ?? "?", ...(field ? { field } : {}), reason });
   };
@@ -185,15 +221,20 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
 
   for (const session of records) {
     if (session.recordType !== "Session") {
-      omit(session.id, undefined, `recordType "${session.recordType}" has no Strong CSV representation — record skipped`);
+      omit(
+        session.id,
+        undefined,
+        `recordType "${session.recordType}" has no Strong CSV representation — record skipped`,
+      );
       continue;
     }
     wIdx++;
 
     const date = toStrongDate(session.startTime);
-    const duration = session.startTime && session.endTime
-      ? Math.round((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000)
-      : 0;
+    const duration =
+      session.startTime && session.endTime
+        ? Math.round((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000)
+        : 0;
     const workoutNo = session.extension?.["io.strong.export"]?.workoutNo ?? String(wIdx);
 
     // Session.exercises passes through; Session.workUnits (the collapsed §5.1 hierarchy —
@@ -207,13 +248,34 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
       else if (node?.recordType === "WorkUnit") {
         // A bare WorkUnit (Session.workUnits or a Block child) can stand alone only if it
         // names its own exercise.
-        if (node.exerciseRef) exercises.push({ recordType: "Exercise", id: node.id, exerciseRef: node.exerciseRef, workUnits: [node] });
+        if (node.exerciseRef)
+          exercises.push({ recordType: "Exercise", id: node.id, exerciseRef: node.exerciseRef, workUnits: [node] });
         else omit(node.id, "exerciseRef", "WorkUnit carries no exerciseRef — no Exercise Name to write; set dropped");
       } else if (node?.recordType === "Block") {
-        if (node.grouping !== undefined) omit(node.id, "grouping", `Block grouping "${node.grouping}" flattened to consecutive plain sets — Strong CSV has no superset/group concept`);
-        if (node.roundScheme !== undefined) omit(node.id, "roundScheme", `Block roundScheme [${node.roundScheme}] dropped — children emitted once; Strong CSV has no rounds`);
-        if (node.repetitions !== undefined) omit(node.id, "repetitions", `Block repetitions (${node.repetitions}) dropped — children emitted once; Strong CSV has no rounds`);
-        if (node.scoring !== undefined) omit(node.id, "scoring", `Block scoring scheme "${node.scoring?.scheme}" dropped — Strong CSV has no block-level schemes`);
+        if (node.grouping !== undefined)
+          omit(
+            node.id,
+            "grouping",
+            `Block grouping "${node.grouping}" flattened to consecutive plain sets — Strong CSV has no superset/group concept`,
+          );
+        if (node.roundScheme !== undefined)
+          omit(
+            node.id,
+            "roundScheme",
+            `Block roundScheme [${node.roundScheme}] dropped — children emitted once; Strong CSV has no rounds`,
+          );
+        if (node.repetitions !== undefined)
+          omit(
+            node.id,
+            "repetitions",
+            `Block repetitions (${node.repetitions}) dropped — children emitted once; Strong CSV has no rounds`,
+          );
+        if (node.scoring !== undefined)
+          omit(
+            node.id,
+            "scoring",
+            `Block scoring scheme "${node.scoring?.scheme}" dropped — Strong CSV has no block-level schemes`,
+          );
         (node.children ?? []).forEach(walk);
       }
     };
@@ -225,8 +287,8 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
       const er = ex.exerciseRef;
       const name =
         typeof er === "string"
-          ? sourceNameForId(er, "strong") ?? er
-          : er?.opaque ?? (er?.id ? sourceNameForId(er.id, "strong") ?? er.id : "");
+          ? (sourceNameForId(er, "strong") ?? er)
+          : (er?.opaque ?? (er?.id ? (sourceNameForId(er.id, "strong") ?? er.id) : ""));
       const workUnits: OpenBodyRecord[] = ex.workUnits ?? [];
 
       let setOrder = 0;
@@ -246,11 +308,17 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
         let weight: string | undefined;
         if (perf.load !== undefined) {
           const p = scalarPart(perf.load.value);
-          if (p.why) omit(wuId, "load", `load is ${p.why} — Strong's Weight column needs an absolute kg value; left at 0`);
+          if (p.why)
+            omit(wuId, "load", `load is ${p.why} — Strong's Weight column needs an absolute kg value; left at 0`);
           else if (p.raw !== undefined) {
             const unit = p.unit ?? perf.load.unit ?? "kg";
             const factor = MASS_TO_KG[unit];
-            if (factor === undefined) omit(wuId, "load", `load unit "${unit}" has no exact conversion to kg (band/machine-level loads have no Strong representation) — Weight left at 0`);
+            if (factor === undefined)
+              omit(
+                wuId,
+                "load",
+                `load unit "${unit}" has no exact conversion to kg (band/machine-level loads have no Strong representation) — Weight left at 0`,
+              );
             else {
               weight = decTimes(p.raw, factor);
               if (weight === undefined) omit(wuId, "load", "load has a non-numeric value — Weight left at 0");
@@ -269,23 +337,46 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
         // RPE: the one effortLoad Strong can hold (single-valued, method "RPE").
         let rpe: string | undefined;
         for (const e of perf.effortLoad ?? []) {
-          if (String(e.method).toUpperCase() === "RPE" && e.value !== undefined && rpe === undefined) rpe = decTimes(e.value, "1");
-          else omit(wuId, "effortLoad", `effortLoad ${e.method ?? e.kind}${e.range ? " (range)" : ""} has no Strong CSV column (only a single RPE value) — dropped`);
+          if (String(e.method).toUpperCase() === "RPE" && e.value !== undefined && rpe === undefined)
+            rpe = decTimes(e.value, "1");
+          else
+            omit(
+              wuId,
+              "effortLoad",
+              `effortLoad ${e.method ?? e.kind}${e.range ? " (range)" : ""} has no Strong CSV column (only a single RPE value) — dropped`,
+            );
         }
 
         if (reps === undefined && weight === undefined && dist.out === undefined && secs.out === undefined) {
-          omit(wuId, undefined, `WorkUnit (scoring "${wu.scoring}") carries nothing Strong's columns can hold — set dropped`);
+          omit(
+            wuId,
+            undefined,
+            `WorkUnit (scoring "${wu.scoring}") carries nothing Strong's columns can hold — set dropped`,
+          );
           continue;
         }
         if (wu.scoring === "energy" || wu.scoring === "continuous") {
-          omit(wuId, "scoring", `scoring "${wu.scoring}" has no Strong equivalent — emitted as a plain set (re-imports as reps/distance/time-scored)`);
+          omit(
+            wuId,
+            "scoring",
+            `scoring "${wu.scoring}" has no Strong equivalent — emitted as a plain set (re-imports as reps/distance/time-scored)`,
+          );
         }
 
         setOrder++;
         rows.push([
-          date, session.name ?? "", String(duration), name, String(setOrder),
-          weight ?? "0", reps ?? "0", dist.out ?? "0", secs.out ?? "0",
-          wu.notes ?? "", String(workoutNo), rpe ?? "",
+          date,
+          session.name ?? "",
+          String(duration),
+          name,
+          String(setOrder),
+          weight ?? "0",
+          reps ?? "0",
+          dist.out ?? "0",
+          secs.out ?? "0",
+          wu.notes ?? "",
+          String(workoutNo),
+          rpe ?? "",
         ]);
       }
     }

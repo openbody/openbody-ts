@@ -11,7 +11,9 @@ import { mapFitbitTakeout } from "../../src/mappers/fitbit.js";
 import { examplesDir, expectValidAndStable } from "../helpers.js";
 
 const dir = path.join(examplesDir, "fitbit");
-const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
+const files = fs
+  .readdirSync(dir)
+  .filter((f) => f.endsWith(".json"))
   .map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), "utf8") }));
 
 const records = mapFitbitTakeout(files, { utcOffset: "-08:00" });
@@ -25,12 +27,14 @@ describe("mapFitbitTakeout", () => {
   // 2. Sleep: category Measurements over ADJACENT intervals (§4.3), with the 2-min
   // shortData wake spliced into the deep segment (5 data segments → 7).
   it("emits adjacent sleep stages with the short wake spliced in, plus summary quantities", () => {
-    const stages = records.filter((r) => r.type === "sleep_stage")
+    const stages = records
+      .filter((r) => r.type === "sleep_stage")
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     expect(stages, "expected 7 stage intervals (5 data + deep split by 1 short wake)").toHaveLength(7);
     for (let i = 0; i < stages.length - 1; i++) {
-      expect(stages[i]?.endTime, `gap/overlap between ${stages[i]?.id} and ${stages[i + 1]?.id}`)
-        .toBe(stages[i + 1]?.startTime);
+      expect(stages[i]?.endTime, `gap/overlap between ${stages[i]?.id} and ${stages[i + 1]?.id}`).toBe(
+        stages[i + 1]?.startTime,
+      );
     }
     expect(stages.map((s) => s.category).join(",")).toBe("awake,light,deep,awake,deep,rem,light");
     for (const s of stages) {
@@ -38,7 +42,13 @@ describe("mapFitbitTakeout", () => {
       expect(s.unit, `${s.id}: category Measurement must not carry a unit`).toBeUndefined();
     }
     // Fitbit's own summary → registry sleep tokens as interval quantities over the log window.
-    for (const [type, mins] of [["sleep_duration", 168], ["sleep_deep", 58], ["sleep_light", 80], ["sleep_rem", 30], ["sleep_awake", 8]] as const) {
+    for (const [type, mins] of [
+      ["sleep_duration", 168],
+      ["sleep_deep", 58],
+      ["sleep_light", 80],
+      ["sleep_rem", 30],
+      ["sleep_awake", 8],
+    ] as const) {
       const r = records.find((x) => x.type === type);
       expect(r, `missing ${type}`).toBeDefined();
       expect(r?.quantity, type).toBe(mins);
@@ -105,7 +115,9 @@ describe("mapFitbitTakeout", () => {
     expect(hrSa?.offsets?.[9]).toBe(105);
     expect(hr[0]?.unit).toBe("/min");
     expect(hrSa?.dataPoints?.[0]).toBe(76);
-    expect(hr[0]?.startTime.endsWith("Z"), `HR timestamps are documented UTC; startTime=${hr[0]?.startTime}`).toBe(true);
+    expect(hr[0]?.startTime.endsWith("Z"), `HR timestamps are documented UTC; startTime=${hr[0]?.startTime}`).toBe(
+      true,
+    );
     expect(hr[0]?.endTime).toBe("2024-01-06T07:01:46Z");
 
     const st = records.filter((r) => r.type === "step_count" && r.sampleArray);
@@ -140,12 +152,18 @@ describe("mapFitbitTakeout", () => {
     });
     it("nested Takeout paths classify by basename", () => {
       const weightText = files.find((f) => f.name === "weight-2024-01-01.json")?.text ?? "[]";
-      const nested = mapFitbitTakeout([{ name: "Takeout/Fitbit/Global Export Data/weight-2024-01-01.json", text: weightText }]);
+      const nested = mapFitbitTakeout([
+        { name: "Takeout/Fitbit/Global Export Data/weight-2024-01-01.json", text: weightText },
+      ]);
       expect(nested.filter((r) => r.type === "body_mass")).toHaveLength(2);
     });
     it("entries missing logId/startTime are skipped", () => {
-      expect(mapFitbitTakeout([{ name: "exercise-1.json", text: JSON.stringify([{ activityName: "Run" }]) }])).toEqual([]);
-      expect(mapFitbitTakeout([{ name: "sleep-2024-01-01.json", text: JSON.stringify([{ duration: 1000 }]) }])).toEqual([]);
+      expect(mapFitbitTakeout([{ name: "exercise-1.json", text: JSON.stringify([{ activityName: "Run" }]) }])).toEqual(
+        [],
+      );
+      expect(mapFitbitTakeout([{ name: "sleep-2024-01-01.json", text: JSON.stringify([{ duration: 1000 }]) }])).toEqual(
+        [],
+      );
     });
   });
 });

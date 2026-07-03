@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import { validate } from "../src/validate.js";
 
 const workUnit = (over: Record<string, any>) => ({
-  id: "wu-1", recordType: "WorkUnit", scoring: "reps", ...over,
+  id: "wu-1",
+  recordType: "WorkUnit",
+  scoring: "reps",
+  ...over,
 });
 
 describe("checkLoadUnit (§5.12 Load.unit conditional)", () => {
@@ -26,22 +29,35 @@ describe("checkLoadUnit (§5.12 Load.unit conditional)", () => {
     expect(v.errors).toContain("Load.unit is required when value is an absolute Target");
   });
   it("absolute Target with the unit nested inside value.absolute → valid (pre-fold location)", () => {
-    const v = validate(workUnit({ performance: { reps: 5, load: { value: { absolute: { value: 100, unit: "kg" } } } } }));
+    const v = validate(
+      workUnit({ performance: { reps: 5, load: { value: { absolute: { value: 100, unit: "kg" } } } } }),
+    );
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
   });
   it("relativeToThreshold with a unit → invalid (unit derives from the threshold)", () => {
-    const v = validate(workUnit({ prescription: { reps: 5, load: { value: { relativeToThreshold: { percent: 80, of: "1RM" } }, unit: "kg" } } }));
+    const v = validate(
+      workUnit({
+        prescription: { reps: 5, load: { value: { relativeToThreshold: { percent: 80, of: "1RM" } }, unit: "kg" } },
+      }),
+    );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('Load.unit MUST be omitted when value is "relativeToThreshold" (§5.12)');
   });
   it("relativeToThreshold without a unit → valid", () => {
-    const v = validate(workUnit({ prescription: { reps: 5, load: { value: { relativeToThreshold: { percent: 80, of: "1RM" } } } } }));
+    const v = validate(
+      workUnit({ prescription: { reps: 5, load: { value: { relativeToThreshold: { percent: 80, of: "1RM" } } } } }),
+    );
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
   });
   it("stopCondition with a unit → invalid", () => {
-    const v = validate(workUnit({ scoring: "time", prescription: { time: 60, load: { value: { stopCondition: { kind: "failure" } }, unit: "kg" } } }));
+    const v = validate(
+      workUnit({
+        scoring: "time",
+        prescription: { time: 60, load: { value: { stopCondition: { kind: "failure" } }, unit: "kg" } },
+      }),
+    );
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('Load.unit MUST be omitted when value is "stopCondition" (§5.12)');
   });
@@ -54,14 +70,16 @@ describe("checkScoringMetric (§5.5 scoring ↔ metric agreement)", () => {
     expect(v.errors).toContain('performance.time contradicts scoring:"reps" (§5.5)');
   });
   it("continuous unit MAY carry distance+time+energy together → valid", () => {
-    const v = validate(workUnit({
-      scoring: "continuous",
-      performance: {
-        distance: { absolute: { value: 5000, unit: "m" } },
-        time: { absolute: { value: 1200, unit: "s" } },
-        energy: { absolute: { value: 300, unit: "kcal" } },
-      },
-    }));
+    const v = validate(
+      workUnit({
+        scoring: "continuous",
+        performance: {
+          distance: { absolute: { value: 5000, unit: "m" } },
+          time: { absolute: { value: 1200, unit: "s" } },
+          energy: { absolute: { value: 300, unit: "kcal" } },
+        },
+      }),
+    );
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
   });
@@ -93,8 +111,12 @@ describe("checkSetsPerformance (§5.5 sets is a planned shorthand)", () => {
 describe("checkTombstone (§7.1/§7.5 strictly id/recordType/status)", () => {
   it("a deleted record carrying payload fields → invalid", () => {
     const v = validate({
-      id: "m-1", recordType: "Measurement", status: "deleted",
-      type: "body_mass", quantity: 80, unit: "kg",
+      id: "m-1",
+      recordType: "Measurement",
+      status: "deleted",
+      type: "body_mass",
+      quantity: 80,
+      unit: "kg",
     });
     expect(v.valid).toBe(false);
     expect(v.errors).toContain("carries fields beyond id/recordType/status");
@@ -109,7 +131,9 @@ describe("checkTombstone (§7.1/§7.5 strictly id/recordType/status)", () => {
 describe("checkExerciseRefEnclosing (§5.5 exerciseRef vs enclosing Exercise)", () => {
   it("a WorkUnit inside an Exercise carrying its own exerciseRef → invalid", () => {
     const v = validate({
-      id: "ex-1", recordType: "Exercise", exerciseRef: { id: "squat.barbell.high-bar" },
+      id: "ex-1",
+      recordType: "Exercise",
+      exerciseRef: { id: "squat.barbell.high-bar" },
       workUnits: [workUnit({ exerciseRef: { opaque: "Squat" }, performance: { reps: 5 } })],
     });
     expect(v.valid).toBe(false);
@@ -117,7 +141,9 @@ describe("checkExerciseRefEnclosing (§5.5 exerciseRef vs enclosing Exercise)", 
   });
   it("children without their own exerciseRef → valid", () => {
     const v = validate({
-      id: "ex-1", recordType: "Exercise", exerciseRef: { id: "squat.barbell.high-bar" },
+      id: "ex-1",
+      recordType: "Exercise",
+      exerciseRef: { id: "squat.barbell.high-bar" },
       workUnits: [workUnit({ performance: { reps: 5 } })],
     });
     expect(v.errors).toBeNull();
@@ -127,7 +153,8 @@ describe("checkExerciseRefEnclosing (§5.5 exerciseRef vs enclosing Exercise)", 
 
 describe("checkThresholdEstimationProvenance (§5.11 / OB-32)", () => {
   const profile = (entry: Record<string, any>) => ({
-    id: "tp-1", recordType: "ThresholdProfile",
+    id: "tp-1",
+    recordType: "ThresholdProfile",
     entries: [{ kind: "1RM", value: 140, unit: "kg", ...entry }],
   });
   it("source:tested with estimationFormula → invalid", () => {
@@ -141,7 +168,13 @@ describe("checkThresholdEstimationProvenance (§5.11 / OB-32)", () => {
     expect(v.errors).toContain('estimatedFrom MUST NOT be present when source is "tested" (§5.11)');
   });
   it("source:estimated with both provenance fields → valid", () => {
-    const v = validate(profile({ source: "estimated", estimationFormula: "epley", estimatedFrom: { reps: 5, load: { value: 120, unit: "kg" } } }));
+    const v = validate(
+      profile({
+        source: "estimated",
+        estimationFormula: "epley",
+        estimatedFrom: { reps: 5, load: { value: 120, unit: "kg" } },
+      }),
+    );
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
   });
@@ -150,7 +183,9 @@ describe("checkThresholdEstimationProvenance (§5.11 / OB-32)", () => {
 describe("validateProgramPhases (§5.2 phase/session cross-checks)", () => {
   it("a phase referencing a session absent from top-level sessions → invalid", () => {
     const v = validate({
-      id: "p-1", recordType: "Program", sessions: ["s-1"],
+      id: "p-1",
+      recordType: "Program",
+      sessions: ["s-1"],
       phases: [{ name: "base", sessions: ["s-2"] }],
     });
     expect(v.valid).toBe(false);
@@ -158,16 +193,26 @@ describe("validateProgramPhases (§5.2 phase/session cross-checks)", () => {
   });
   it("a session id in two phases → invalid (phases are disjoint)", () => {
     const v = validate({
-      id: "p-1", recordType: "Program", sessions: ["s-1"],
-      phases: [{ name: "a", sessions: ["s-1"] }, { name: "b", sessions: ["s-1"] }],
+      id: "p-1",
+      recordType: "Program",
+      sessions: ["s-1"],
+      phases: [
+        { name: "a", sessions: ["s-1"] },
+        { name: "b", sessions: ["s-1"] },
+      ],
     });
     expect(v.valid).toBe(false);
     expect(v.errors).toContain("appears in more than one phase's sessions — phases MUST be disjoint (§5.2)");
   });
   it("phases partitioning top-level sessions → valid", () => {
     const v = validate({
-      id: "p-1", recordType: "Program", sessions: ["s-1", "s-2"],
-      phases: [{ name: "a", sessions: ["s-1"] }, { name: "b", sessions: ["s-2"] }],
+      id: "p-1",
+      recordType: "Program",
+      sessions: ["s-1", "s-2"],
+      phases: [
+        { name: "a", sessions: ["s-1"] },
+        { name: "b", sessions: ["s-2"] },
+      ],
     });
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
@@ -177,11 +222,16 @@ describe("validateProgramPhases (§5.2 phase/session cross-checks)", () => {
 describe("semantic checks walk the inlined tree (§5.1)", () => {
   it("a violation deep inside Session.blocks[].children[] is caught", () => {
     const v = validate({
-      id: "s-1", recordType: "Session", subject: "u-1",
-      blocks: [{
-        id: "b-1", recordType: "Block",
-        children: [workUnit({ performance: { reps: 5, load: { value: 100 } } })],
-      }],
+      id: "s-1",
+      recordType: "Session",
+      subject: "u-1",
+      blocks: [
+        {
+          id: "b-1",
+          recordType: "Block",
+          children: [workUnit({ performance: { reps: 5, load: { value: 100 } } })],
+        },
+      ],
     });
     expect(v.valid).toBe(false);
     expect(v.errors).toContain("Load.unit is required when value is a scalar (§5.12)");

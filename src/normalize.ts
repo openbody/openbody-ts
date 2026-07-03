@@ -19,13 +19,22 @@ const CONTAINERS: Record<string, string[]> = {
 
 // Metric-value fields and their §5.10 default units (null = dimensionless).
 const METRIC_DEFAULT_UNIT: Record<string, string | null> = {
-  reps: null, time: "s", rest: "s", distance: "m", energy: "kcal", velocity: "m/s", rangeOfMotion: "deg",
+  reps: null,
+  time: "s",
+  rest: "s",
+  distance: "m",
+  energy: "kcal",
+  velocity: "m/s",
+  rangeOfMotion: "deg",
 };
 const PRESCRIPTION_METRICS = ["reps", "time", "distance", "energy", "rest"];
 
 // §5.8 primary metric per WorkUnit.scoring kind (continuous has none → skipped).
 const SCORING_PRIMARY_METRIC: Record<string, string> = {
-  reps: "reps", time: "time", distance: "distance", energy: "energy",
+  reps: "reps",
+  time: "time",
+  distance: "distance",
+  energy: "energy",
 };
 
 // Deep clone that preserves LosslessNumber instances (a plain JSON round-trip would
@@ -46,8 +55,14 @@ function isScalarNumber(v: any): boolean {
 }
 
 function isFixedPointWire(v: any): boolean {
-  return v && typeof v === "object" && !Array.isArray(v)
-    && "coefficient" in v && "exponent" in v && Object.keys(v).length === 2;
+  return (
+    v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    "coefficient" in v &&
+    "exponent" in v &&
+    Object.keys(v).length === 2
+  );
 }
 
 // Expand a scalar metric to {absolute:{value}}; strip a unit equal to the field default.
@@ -193,12 +208,19 @@ function expandSets(arr: any[]): any[] {
   for (const item of arr) {
     const p = item?.recordType === "WorkUnit" ? item.prescription : undefined;
     const raw = p ? p.sets : undefined;
-    const n = raw instanceof LosslessNumber ? Number(raw.value)
-      : typeof raw === "number" ? raw : undefined;
+    const n = raw instanceof LosslessNumber ? Number(raw.value) : typeof raw === "number" ? raw : undefined;
     if (n && n >= 1) {
-      if (item.performance !== undefined) throw new Error(`WorkUnit ${item.id ?? "?"}: sets+performance is invalid (§5.5)`);
-      const first = clone(item); delete first.prescription.sets; out.push(first);
-      for (let i = 1; i < n; i++) { const c = clone(item); delete c.prescription.sets; delete c.id; out.push(c); }
+      if (item.performance !== undefined)
+        throw new Error(`WorkUnit ${item.id ?? "?"}: sets+performance is invalid (§5.5)`);
+      const first = clone(item);
+      delete first.prescription.sets;
+      out.push(first);
+      for (let i = 1; i < n; i++) {
+        const c = clone(item);
+        delete c.prescription.sets;
+        delete c.id;
+        out.push(c);
+      }
     } else {
       out.push(item);
     }
@@ -206,11 +228,18 @@ function expandSets(arr: any[]): any[] {
   return out;
 }
 
-interface Ctx { subject?: string; startTime?: string; endTime?: string }
+interface Ctx {
+  subject?: string;
+  startTime?: string;
+  endTime?: string;
+}
 
 function flatten(rec: Rec, ctx: Ctx, out: Rec[]): void {
   // Tombstone: only id/recordType/status; no transforms (§7.1/§7.5).
-  if (rec.status === "deleted") { out.push(rec); return; }
+  if (rec.status === "deleted") {
+    out.push(rec);
+    return;
+  }
 
   // Propagate subject + timing (nearest ancestor wins; explicit child value wins).
   if (rec.subject === undefined && ctx.subject !== undefined) rec.subject = ctx.subject;

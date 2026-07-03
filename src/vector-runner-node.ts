@@ -33,7 +33,10 @@ export function discoverVectorFiles(): VectorFile[] {
   ];
   return dirs.flatMap((d) =>
     fs.existsSync(d.path)
-      ? fs.readdirSync(d.path).filter((f) => f.endsWith(".json") && f !== "index.json").sort()
+      ? fs
+          .readdirSync(d.path)
+          .filter((f) => f.endsWith(".json") && f !== "index.json")
+          .sort()
           .map((f) => ({ label: d.label, dir: d.path, file: f }))
       : [],
   );
@@ -66,8 +69,8 @@ function idempotent(doc: any): boolean {
 /** Run one vector file's assertion against this implementation. */
 export function runVectorFile(dir: string, file: string): VectorOutcome {
   const text = fs.readFileSync(path.join(dir, file), "utf8");
-  const v = JSON.parse(text);              // plain parse: metadata + schema validation
-  const vL = parseLossless(text) as any;   // lossless parse: documents for §8.3 normalization
+  const v = JSON.parse(text); // plain parse: metadata + schema validation
+  const vL = parseLossless(text) as any; // lossless parse: documents for §8.3 normalization
   const name = `${v.name} [${v.kind}]`;
   const ok = (detail?: string): VectorOutcome => ({ name, ok: true, ...(detail ? { detail } : {}) });
   const bad = (why: string): VectorOutcome => ({ name, ok: false, detail: why });
@@ -82,17 +85,21 @@ export function runVectorFile(dir: string, file: string): VectorOutcome {
       const e = allValid(v.record);
       return e ? ok() : bad("expected schema rejection but it validated");
     } else if (v.kind === "equivalent") {
-      const ea = allValid(v.a), eb = allValid(v.b);
+      const ea = allValid(v.a),
+        eb = allValid(v.b);
       if (ea) return bad(`a ${ea}`);
       if (eb) return bad(`b ${eb}`);
       if (equivalent(vL.a, vL.b)) return ok();
-      return bad([
-        "a and b are NOT equivalent",
-        `  a: ${JSON.stringify(normalizeDocument(vL.a))}`,
-        `  b: ${JSON.stringify(normalizeDocument(vL.b))}`,
-      ].join("\n"));
+      return bad(
+        [
+          "a and b are NOT equivalent",
+          `  a: ${JSON.stringify(normalizeDocument(vL.a))}`,
+          `  b: ${JSON.stringify(normalizeDocument(vL.b))}`,
+        ].join("\n"),
+      );
     } else if (v.kind === "inequivalent") {
-      const ea = allValid(v.a), eb = allValid(v.b);
+      const ea = allValid(v.a),
+        eb = allValid(v.b);
       if (ea) return bad(`a ${ea}`);
       if (eb) return bad(`b ${eb}`);
       if (!equivalent(vL.a, vL.b)) return ok();
@@ -102,13 +109,17 @@ export function runVectorFile(dir: string, file: string): VectorOutcome {
       if (Array.isArray(v.expected)) {
         const match = recs.length === v.expected.length && recs.every((s, i) => s === v.expected[i]);
         if (match) return ok(`(${recs.length} records, exact match)`);
-        return bad([
-          "normalized output != pinned expected",
-          `  got:      ${JSON.stringify(recs)}`,
-          `  expected: ${JSON.stringify(v.expected)}`,
-        ].join("\n"));
+        return bad(
+          [
+            "normalized output != pinned expected",
+            `  got:      ${JSON.stringify(recs)}`,
+            `  expected: ${JSON.stringify(v.expected)}`,
+          ].join("\n"),
+        );
       }
-      return ok(`(${recs.length} canonical records; no pinned expected)\n${recs.map((r) => `       · ${r}`).join("\n")}`);
+      return ok(
+        `(${recs.length} canonical records; no pinned expected)\n${recs.map((r) => `       · ${r}`).join("\n")}`,
+      );
     }
     return bad(`unknown kind ${v.kind}`);
   } catch (err) {

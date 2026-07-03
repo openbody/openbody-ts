@@ -13,7 +13,10 @@ describe("mapGpx", () => {
     it("every record validates + normalization round-trips", () => {
       expectAllValid(gpx);
       expectRoundTripStable(gpx);
-      expect(gpx, `expected 4 records (route, hr, cadence, session), got ${gpx.map((r) => r.id).join(",")}`).toHaveLength(4);
+      expect(
+        gpx,
+        `expected 4 records (route, hr, cadence, session), got ${gpx.map((r) => r.id).join(",")}`,
+      ).toHaveLength(4);
     });
 
     it("concatenates trksegs into one honest offset series (the pause stays visible)", () => {

@@ -17,7 +17,9 @@ const destDir = path.join(root, "vendor");
 const dest = path.join(destDir, "openbody.schema.json");
 
 if (!fs.existsSync(src)) {
-  console.error(`sync-schema: no schema found at ${src} — set OPENBODY_STANDARD or check out the sibling openbody repo.`);
+  console.error(
+    `sync-schema: no schema found at ${src} — set OPENBODY_STANDARD or check out the sibling openbody repo.`,
+  );
   process.exit(1);
 }
 

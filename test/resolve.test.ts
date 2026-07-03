@@ -12,12 +12,16 @@ import { readExample, repoRoot, validate } from "./helpers.js";
 
 describe("rung 1: exact per-app alias match (id + lossless opaque)", () => {
   it("hevy exact alias", () => {
-    expect(resolveExerciseRef("Bench Press (Barbell)", { source: "hevy" }))
-      .toEqual({ id: "bench-press.barbell.flat", opaque: "Bench Press (Barbell)" });
+    expect(resolveExerciseRef("Bench Press (Barbell)", { source: "hevy" })).toEqual({
+      id: "bench-press.barbell.flat",
+      opaque: "Bench Press (Barbell)",
+    });
   });
   it("strong exact alias", () => {
-    expect(resolveExerciseRef("Bench Press (Barbell)", { source: "strong" }))
-      .toEqual({ id: "bench-press.barbell.flat", opaque: "Bench Press (Barbell)" });
+    expect(resolveExerciseRef("Bench Press (Barbell)", { source: "strong" })).toEqual({
+      id: "bench-press.barbell.flat",
+      opaque: "Bench Press (Barbell)",
+    });
   });
   // The OB-65 marquee case: Hevy and Strong spellings land on the same canonical id.
   it("hevy/strong spellings converge", () => {
@@ -28,8 +32,9 @@ describe("rung 1: exact per-app alias match (id + lossless opaque)", () => {
   });
   // Curated null = known unmappable: opaque only, and fuzzy rungs must NOT override it.
   it("curated null → opaque only", () => {
-    expect(resolveExerciseRef("Bulgarian Split Squat", { source: "hevy" }))
-      .toEqual({ opaque: "Bulgarian Split Squat" });
+    expect(resolveExerciseRef("Bulgarian Split Squat", { source: "hevy" })).toEqual({
+      opaque: "Bulgarian Split Squat",
+    });
   });
 });
 
@@ -41,8 +46,10 @@ describe("rung 2: canonical-id passthrough", () => {
 
 describe("rung 3: normalized matches (work without any source table too)", () => {
   it("case/punctuation-insensitive registry-name match", () => {
-    expect(resolveExerciseRef("  BARBELL back squat!! "))
-      .toEqual({ id: "squat.barbell.high-bar", opaque: "  BARBELL back squat!! " });
+    expect(resolveExerciseRef("  BARBELL back squat!! ")).toEqual({
+      id: "squat.barbell.high-bar",
+      opaque: "  BARBELL back squat!! ",
+    });
   });
   // Token-sorted: "Barbell Bench Press" (no strong table consulted) ↔ hevy alias
   // "Bench Press (Barbell)" both sort to "barbell bench press".
@@ -73,7 +80,9 @@ describe("rung 4: opaque fallback", () => {
 
 describe("every ExerciseRef shape the resolver emits validates against the schema", () => {
   const exercise = (ref: unknown) => ({
-    id: "ex-1", recordType: "Exercise", exerciseRef: ref,
+    id: "ex-1",
+    recordType: "Exercise",
+    exerciseRef: ref,
     workUnits: [{ id: "wu-1", recordType: "WorkUnit", scoring: "reps", performance: { reps: 5 } }],
   });
   it.each([
@@ -105,8 +114,9 @@ describe("alias-table coverage of the example exports", () => {
 
 describe("determinism + outbound reverse lookup", () => {
   it("same input, same output (indexes are order-independent)", () => {
-    expect(resolveExerciseRef("Lat Pulldown (Cable)", { source: "hevy" }))
-      .toEqual(resolveExerciseRef("Lat Pulldown (Cable)", { source: "hevy" }));
+    expect(resolveExerciseRef("Lat Pulldown (Cable)", { source: "hevy" })).toEqual(
+      resolveExerciseRef("Lat Pulldown (Cable)", { source: "hevy" }),
+    );
   });
   it("sourceNameForId finds a strong alias", () => {
     const n = sourceNameForId("bench-press.barbell.flat", "strong");

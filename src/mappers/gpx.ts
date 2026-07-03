@@ -44,10 +44,16 @@ import type { OpenBodyRecord, MapOptions } from "../types.js";
 const NAME = "[A-Za-z_][\\w.-]*";
 const elRe = (tag: string) =>
   new RegExp(`<(?:${NAME}:)?${tag}((?:\\s[^>]*?)?)(?:/>|>([\\s\\S]*?)</(?:${NAME}:)?${tag}\\s*>)`, "g");
-interface El { attrs: Record<string, string>; inner: string }
+interface El {
+  attrs: Record<string, string>;
+  inner: string;
+}
 function* els(xml: string, tag: string): Generator<El> {
   for (const m of xml.matchAll(elRe(tag)))
-    yield { attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])), inner: m[2] ?? "" };
+    yield {
+      attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])),
+      inner: m[2] ?? "",
+    };
 }
 const first = (xml: string, tag: string): El | undefined => els(xml, tag).next().value;
 const text = (xml: string, tag: string): string | undefined => {
@@ -60,17 +66,35 @@ const numText = (xml: string, tag: string): number | undefined => {
 };
 
 const DISC: Record<string, string> = {
-  running: "running", run: "running", trail_running: "running",
-  cycling: "cycling", ride: "cycling", biking: "cycling", bike: "cycling", mountain_biking: "cycling",
-  hiking: "hiking", hike: "hiking",
-  walking: "walking", walk: "walking",
-  swimming: "swimming", swim: "swimming",
-  rowing: "rowing", row: "rowing",
+  running: "running",
+  run: "running",
+  trail_running: "running",
+  cycling: "cycling",
+  ride: "cycling",
+  biking: "cycling",
+  bike: "cycling",
+  mountain_biking: "cycling",
+  hiking: "hiking",
+  hike: "hiking",
+  walking: "walking",
+  walk: "walking",
+  swimming: "swimming",
+  swim: "swimming",
+  rowing: "rowing",
+  row: "rowing",
 };
 const disciplineFor = (t?: string): string | undefined =>
-  t ? DISC[t.toLowerCase().replace(/\s+/g, "_")] ?? `gpx:${t.toLowerCase()}` : undefined;
+  t ? (DISC[t.toLowerCase().replace(/\s+/g, "_")] ?? `gpx:${t.toLowerCase()}`) : undefined;
 
-interface Pt { lat: number; lon: number; ele?: number; time?: string; hr?: number; cad?: number; power?: number }
+interface Pt {
+  lat: number;
+  lon: number;
+  ele?: number;
+  time?: string;
+  hr?: number;
+  cad?: number;
+  power?: number;
+}
 
 /** Map a GPX 1.1 (or 1.0) document string to OpenBody wire records (see file header for shape decisions). */
 export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -85,8 +109,10 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       for (const p of els(seg.inner, "trkpt")) {
         const ext = first(p.inner, "extensions")?.inner ?? "";
         pts.push({
-          lat: Number(p.attrs.lat), lon: Number(p.attrs.lon),
-          ele: numText(p.inner, "ele"), time: text(p.inner, "time"),
+          lat: Number(p.attrs.lat),
+          lon: Number(p.attrs.lon),
+          ele: numText(p.inner, "ele"),
+          time: text(p.inner, "time"),
           hr: numText(ext, "hr"),
           cad: numText(ext, "cad") ?? numText(ext, "cadence"),
           power: numText(ext, "power"),
@@ -108,37 +134,62 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   if (firstTimed === undefined) {
     // Untimed track: no offsets are representable (§4.3) — Session only, geometry kept losslessly.
     gpxExt.untimedTrack = { channels: ["lat", "lon", "alt"], points: pts.map((p) => [p.lat, p.lon, p.ele ?? null]) };
-    return [{
-      id: "gpx-session", recordType: "Session", subject,
-      ...(trkName ? { name: trkName } : {}),
-      ...(discipline ? { disciplines: [discipline] } : {}),
-      intent: "train", provenance: prov, extension: { gpx: gpxExt },
-    }];
+    return [
+      {
+        id: "gpx-session",
+        recordType: "Session",
+        subject,
+        ...(trkName ? { name: trkName } : {}),
+        ...(discipline ? { disciplines: [discipline] } : {}),
+        intent: "train",
+        provenance: prov,
+        extension: { gpx: gpxExt },
+      },
+    ];
   }
   if (timed.length < pts.length) gpxExt.droppedUntimedPoints = pts.length - timed.length;
 
-  const start = firstTimed.time, end = (timed[timed.length - 1] ?? firstTimed).time;
+  const start = firstTimed.time,
+    end = (timed[timed.length - 1] ?? firstTimed).time;
   const t0 = Date.parse(start);
   const offsets = timed.map((p) => (Date.parse(p.time) - t0) / 1000);
 
   const records: OpenBodyRecord[] = [];
   const measuredBy: OpenBodyRecord[] = [];
   records.push({
-    id: "gpx-route", recordType: "Measurement", subject, type: "location",
+    id: "gpx-route",
+    recordType: "Measurement",
+    subject,
+    type: "location",
     sampleArray: {
       offsets,
-      channels: [{ name: "lat", unit: "deg" }, { name: "lon", unit: "deg" }, { name: "alt", unit: "m" }],
+      channels: [
+        { name: "lat", unit: "deg" },
+        { name: "lon", unit: "deg" },
+        { name: "alt", unit: "m" },
+      ],
       dataPoints: timed.map((p) => [p.lat, p.lon, p.ele ?? null]),
     },
-    startTime: start, endTime: end, provenance: prov,
+    startTime: start,
+    endTime: end,
+    provenance: prov,
   });
   measuredBy.push({ type: "measuredBy", ref: "gpx-route" });
 
   const scalarStream = (id: string, type: string, unit: string, pick: (p: Pt) => number | undefined) => {
     const data = timed.map((p) => pick(p) ?? null);
     if (data.every((v) => v === null)) return;
-    records.push({ id, recordType: "Measurement", subject, type, unit,
-      sampleArray: { offsets, dataPoints: data }, startTime: start, endTime: end, provenance: prov });
+    records.push({
+      id,
+      recordType: "Measurement",
+      subject,
+      type,
+      unit,
+      sampleArray: { offsets, dataPoints: data },
+      startTime: start,
+      endTime: end,
+      provenance: prov,
+    });
     measuredBy.push({ type: "measuredBy", ref: id });
   };
   scalarStream("gpx-hr", "heart_rate", "/min", (p) => p.hr);
@@ -146,15 +197,24 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   scalarStream("gpx-power", "power", "W", (p) => p.power);
 
   records.push({
-    id: "gpx-session", recordType: "Session", subject,
+    id: "gpx-session",
+    recordType: "Session",
+    subject,
     ...(trkName ? { name: trkName } : {}),
     ...(discipline ? { disciplines: [discipline] } : {}),
-    intent: "train", startTime: start, endTime: end,
-    provenance: prov, links: measuredBy,
-    workUnits: [{
-      id: "gpx-session-wu", recordType: "WorkUnit", scoring: "continuous",
-      performance: { time: { absolute: { value: offsets[offsets.length - 1], unit: "s" } } },
-    }],
+    intent: "train",
+    startTime: start,
+    endTime: end,
+    provenance: prov,
+    links: measuredBy,
+    workUnits: [
+      {
+        id: "gpx-session-wu",
+        recordType: "WorkUnit",
+        scoring: "continuous",
+        performance: { time: { absolute: { value: offsets[offsets.length - 1], unit: "s" } } },
+      },
+    ],
     ...(Object.keys(gpxExt).length ? { extension: { gpx: gpxExt } } : {}),
   });
   return records;

@@ -13,7 +13,10 @@ import { mapFit } from "../../src/mappers/index.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => JSON.parse(fs.readFileSync(path.join(here, f), "utf8"));
 
-for (const [name, file] of [["activity", "fit-activity-sample.json"], ["workout", "fit-workout-sample.json"]] as const) {
+for (const [name, file] of [
+  ["activity", "fit-activity-sample.json"],
+  ["workout", "fit-workout-sample.json"],
+] as const) {
   const records = mapFit(read(file));
   console.log(`Mapped FIT ${name} -> ${records.length} OpenBody records.\n`);
   let bad = 0;

@@ -50,10 +50,16 @@ import type { OpenBodyRecord, MapOptions } from "../types.js";
 const NAME = "[A-Za-z_][\\w.-]*";
 const elRe = (tag: string) =>
   new RegExp(`<(?:${NAME}:)?${tag}((?:\\s[^>]*?)?)(?:/>|>([\\s\\S]*?)</(?:${NAME}:)?${tag}\\s*>)`, "g");
-interface El { attrs: Record<string, string>; inner: string }
+interface El {
+  attrs: Record<string, string>;
+  inner: string;
+}
 function* els(xml: string, tag: string): Generator<El> {
   for (const m of xml.matchAll(elRe(tag)))
-    yield { attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])), inner: m[2] ?? "" };
+    yield {
+      attrs: Object.fromEntries([...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])),
+      inner: m[2] ?? "",
+    };
 }
 const first = (xml: string, tag: string): El | undefined => els(xml, tag).next().value;
 const text = (xml: string, tag: string): string | undefined => {
@@ -72,7 +78,15 @@ const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z")
 
 const SPORT: Record<string, string> = { Running: "running", Biking: "cycling" };
 
-interface Tp { time?: string; lat?: number; lon?: number; alt?: number; hr?: number; cad?: number; watts?: number }
+interface Tp {
+  time?: string;
+  lat?: number;
+  lon?: number;
+  alt?: number;
+  hr?: number;
+  cad?: number;
+  watts?: number;
+}
 
 /** Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records (see file header for shape decisions). */
 export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
@@ -86,9 +100,15 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     const sport = act.attrs.Sport;
     const discipline = (sport && SPORT[sport]) || `tcx:${(sport ?? "other").toLowerCase()}`;
     const actId = text(act.inner, "Id");
-    const creatorName = (() => { const c = first(act.inner, "Creator"); return c ? text(c.inner, "Name") : undefined; })();
-    const prov = (method: string): OpenBodyRecord =>
-      ({ method, sourceApp: "tcx", ...(creatorName ? { device: { model: creatorName } } : {}) });
+    const creatorName = (() => {
+      const c = first(act.inner, "Creator");
+      return c ? text(c.inner, "Name") : undefined;
+    })();
+    const prov = (method: string): OpenBodyRecord => ({
+      method,
+      sourceApp: "tcx",
+      ...(creatorName ? { device: { model: creatorName } } : {}),
+    });
 
     // Laps: per-lap metadata (Track blocks stripped so a Trackpoint's Cadence /
     // DistanceMeters can't shadow the lap-level fields) + concatenated trackpoints.
@@ -120,26 +140,45 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     let mStart: string | undefined, mEnd: string | undefined;
     const firstTimed = timed[0];
     if (firstTimed !== undefined) {
-      mStart = firstTimed.time; mEnd = (timed[timed.length - 1] ?? firstTimed).time;
+      mStart = firstTimed.time;
+      mEnd = (timed[timed.length - 1] ?? firstTimed).time;
       const t0 = Date.parse(mStart);
       const offsets = timed.map((t) => (Date.parse(t.time) - t0) / 1000);
       if (timed.some((t) => t.lat != null)) {
         records.push({
-          id: `${base}-route`, recordType: "Measurement", subject, type: "location",
+          id: `${base}-route`,
+          recordType: "Measurement",
+          subject,
+          type: "location",
           sampleArray: {
             offsets,
-            channels: [{ name: "lat", unit: "deg" }, { name: "lon", unit: "deg" }, { name: "alt", unit: "m" }],
+            channels: [
+              { name: "lat", unit: "deg" },
+              { name: "lon", unit: "deg" },
+              { name: "alt", unit: "m" },
+            ],
             dataPoints: timed.map((t) => [t.lat ?? null, t.lon ?? null, t.alt ?? null]),
           },
-          startTime: mStart, endTime: mEnd, provenance: prov("sensor"),
+          startTime: mStart,
+          endTime: mEnd,
+          provenance: prov("sensor"),
         });
         measuredBy.push({ type: "measuredBy", ref: `${base}-route` });
       }
       const scalarStream = (id: string, type: string, unit: string, pick: (t: Tp) => number | undefined) => {
         const data = timed.map((t) => pick(t) ?? null);
         if (data.every((v) => v === null)) return;
-        records.push({ id, recordType: "Measurement", subject, type, unit,
-          sampleArray: { offsets, dataPoints: data }, startTime: mStart, endTime: mEnd, provenance: prov("sensor") });
+        records.push({
+          id,
+          recordType: "Measurement",
+          subject,
+          type,
+          unit,
+          sampleArray: { offsets, dataPoints: data },
+          startTime: mStart,
+          endTime: mEnd,
+          provenance: prov("sensor"),
+        });
         measuredBy.push({ type: "measuredBy", ref: id });
       };
       scalarStream(`${base}-hr`, "heart_rate", "/min", (t) => t.hr);
@@ -160,7 +199,12 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       const cal = numText(lap.meta, "Calories");
       if (cal != null) perf.energy = { absolute: { value: cal, unit: "kcal" } };
 
-      const wu: OpenBodyRecord = { id: `${base}-lap-${li}`, recordType: "WorkUnit", scoring: "continuous", performance: perf };
+      const wu: OpenBodyRecord = {
+        id: `${base}-lap-${li}`,
+        recordType: "WorkUnit",
+        scoring: "continuous",
+        performance: perf,
+      };
       if (lapStart) wu.startTime = lapStart;
       const intensity = text(lap.meta, "Intensity");
       if (intensity && intensity !== "Active") wu.setRole = `tcx:${intensity.toLowerCase()}`;
@@ -170,9 +214,18 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
         const aggregate = (id: string, type: string, value: number | undefined) => {
           if (value == null) return;
           records.push({
-            id, recordType: "Measurement", subject, type, quantity: value, unit: "/min",
-            startTime: lapStart, endTime: lapEnd,
-            provenance: { ...prov("algorithm"), algorithm: { name: "tcx-lap-summary", version: "TrainingCenterDatabase/v2" } },
+            id,
+            recordType: "Measurement",
+            subject,
+            type,
+            quantity: value,
+            unit: "/min",
+            startTime: lapStart,
+            endTime: lapEnd,
+            provenance: {
+              ...prov("algorithm"),
+              algorithm: { name: "tcx-lap-summary", version: "TrainingCenterDatabase/v2" },
+            },
             ...(hrStream ? { links: [{ type: "derivedFrom", ref: `${base}-hr` }] } : {}),
           });
         };
@@ -190,10 +243,14 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     const end = mEnd ?? (start && totalSec ? iso(Date.parse(start) + totalSec * 1000) : undefined);
 
     records.push({
-      id: base, recordType: "Session", subject,
+      id: base,
+      recordType: "Session",
+      subject,
       ...(actId ? { clientRecordId: actId } : {}),
-      disciplines: [discipline], intent: "train",
-      ...(start ? { startTime: start } : {}), ...(end ? { endTime: end } : {}),
+      disciplines: [discipline],
+      intent: "train",
+      ...(start ? { startTime: start } : {}),
+      ...(end ? { endTime: end } : {}),
       provenance: prov("sensor"),
       ...(measuredBy.length ? { links: measuredBy } : {}),
       ...(workUnits.length ? { workUnits } : {}),

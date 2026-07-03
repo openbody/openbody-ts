@@ -41,8 +41,10 @@ describe("mapConcept2", () => {
     expect(hr?.type).toBe("heart_rate_mean");
     expect(hr?.quantity).toBe(172);
     expect(hr?.unit).toBe("/min");
-    expect(twoK?.links?.some((l: any) => l.type === "measuredBy" && l.ref === hr?.id),
-      "Session missing measuredBy link to the HR measurement").toBe(true);
+    expect(
+      twoK?.links?.some((l: any) => l.type === "measuredBy" && l.ref === hr?.id),
+      "Session missing measuredBy link to the HR measurement",
+    ).toBe(true);
     // The Date column is offset-less wall-clock time — the mapped instant (and the HR
     // measurement window) must be the same on every host TZ (parsed manually, stamped "Z").
     expect(twoK?.startTime, "want 06:45:00Z regardless of host TZ").toBe("2026-03-02T06:45:00Z");
@@ -67,8 +69,10 @@ describe("mapConcept2", () => {
     expect(wu?.scoring).toBe("continuous");
     expect(wu?.performance?.time?.absolute?.value).toBe(157.4);
     expect(wu?.performance?.distance?.absolute?.value).toBe(610);
-    expect(c2.some((r) => r.recordType === "Measurement" && r.id === `${jr?.id}-hr`),
-      "HR measurement emitted with no Avg Heart Rate").toBe(false);
+    expect(
+      c2.some((r) => r.recordType === "Measurement" && r.id === `${jr?.id}-hr`),
+      "HR measurement emitted with no Avg Heart Rate",
+    ).toBe(false);
   });
 
   // 8x500m/0:30r ⇒ Block of 8 distance-scored 500 m WorkUnits, each with 30 s rest.
@@ -115,7 +119,9 @@ describe("mapConcept2", () => {
   // Every canonical exerciseRef id the mapper emits exists in the registry
   // (../openbody-registry/data/exercises.json, override with OPENBODY_REGISTRY).
   it.skipIf(!haveRegistry)("every canonical exerciseRef id exists in the registry", () => {
-    const known = new Set((JSON.parse(fs.readFileSync(registryExercisesPath, "utf8")) as { id: string }[]).map((e) => e.id));
+    const known = new Set(
+      (JSON.parse(fs.readFileSync(registryExercisesPath, "utf8")) as { id: string }[]).map((e) => e.id),
+    );
     const ids = collectExerciseRefIds(c2);
     expect(ids.size).toBeGreaterThan(0);
     for (const id of ids) expect(known.has(id), `exerciseRef id "${id}" not in the registry`).toBe(true);

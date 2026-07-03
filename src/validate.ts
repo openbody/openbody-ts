@@ -126,7 +126,9 @@ function checkLoadUnit(load: any, where: string): string[] {
   } else if (variant === "absolute" || variant === "range") {
     const nestedUnit = load.value[variant]?.unit;
     if (load.unit === undefined && nestedUnit === undefined) {
-      return [`${where}: Load.unit is required when value is an ${variant} Target (unless nested inside value.${variant}.unit, folded on normalization) (§5.12; folded per EQUIVALENCE.md)`];
+      return [
+        `${where}: Load.unit is required when value is an ${variant} Target (unless nested inside value.${variant}.unit, folded on normalization) (§5.12; folded per EQUIVALENCE.md)`,
+      ];
     }
   } else if (variant === "relativeToThreshold" || variant === "stopCondition") {
     if (load.unit !== undefined) {
@@ -158,9 +160,7 @@ function checkScoringMetric(wu: Record<string, any>): string[] {
     if (!obj || typeof obj !== "object") continue;
     for (const f of PRIMARY_METRIC_FIELDS) {
       if (f in obj && !allowed.includes(f)) {
-        errors.push(
-          `WorkUnit ${wu.id ?? "?"} ${side}.${f} contradicts scoring:"${wu.scoring}" (§5.5)`,
-        );
+        errors.push(`WorkUnit ${wu.id ?? "?"} ${side}.${f} contradicts scoring:"${wu.scoring}" (§5.5)`);
       }
     }
   }
@@ -218,10 +218,14 @@ function checkThresholdEstimationProvenance(rec: Record<string, any>): string[] 
   rec.entries.forEach((entry: any, i: number) => {
     if (!entry || typeof entry !== "object" || entry.source !== "tested") return;
     if (entry.estimationFormula !== undefined) {
-      errors.push(`ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimationFormula MUST NOT be present when source is "tested" (§5.11)`);
+      errors.push(
+        `ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimationFormula MUST NOT be present when source is "tested" (§5.11)`,
+      );
     }
     if (entry.estimatedFrom !== undefined) {
-      errors.push(`ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimatedFrom MUST NOT be present when source is "tested" (§5.11)`);
+      errors.push(
+        `ThresholdProfile ${rec.id ?? "?"} entries[${i}]: estimatedFrom MUST NOT be present when source is "tested" (§5.11)`,
+      );
     }
   });
   return errors;

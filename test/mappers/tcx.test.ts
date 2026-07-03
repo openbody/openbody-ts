@@ -12,7 +12,10 @@ describe("mapTcx", () => {
     it("every record validates + normalization round-trips", () => {
       expectAllValid(tcx);
       expectRoundTripStable(tcx);
-      expect(tcx, `expected 9 records (route/hr/cadence/power + 4 aggregates + session), got ${tcx.map((r) => r.id).join(",")}`).toHaveLength(9);
+      expect(
+        tcx,
+        `expected 9 records (route/hr/cadence/power + 4 aggregates + session), got ${tcx.map((r) => r.id).join(",")}`,
+      ).toHaveLength(9);
     });
 
     it("builds the Session (id, clientRecordId, discipline, span, Creator device)", () => {
@@ -62,8 +65,10 @@ describe("mapTcx", () => {
       expect(mean1?.type).toBe("heart_rate_mean");
       expect(mean1?.startTime).toBe("2010-06-26T10:06:11Z");
       expect(mean1?.endTime).toBe("2010-06-26T10:06:26Z");
-      expect(mean1?.links?.some((l: any) => l.type === "derivedFrom" && l.ref === "tcx-1-hr"),
-        "lap aggregate missing derivedFrom → hr stream").toBe(true);
+      expect(
+        mean1?.links?.some((l: any) => l.type === "derivedFrom" && l.ref === "tcx-1-hr"),
+        "lap aggregate missing derivedFrom → hr stream",
+      ).toBe(true);
       expect(mean1?.provenance?.algorithm?.name, "derived aggregate should name its algorithm (§7.4)").toBeDefined();
       const max2 = tcx.find((r) => r.id === "tcx-1-lap-2-hr-max");
       expect(max2?.quantity).toBe(150);
@@ -89,7 +94,9 @@ describe("mapTcx", () => {
       expect(mapTcx("")).toEqual([]);
     });
     it("an Activity with no laps/trackpoints still emits an undated Session", () => {
-      const out = mapTcx('<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>run-1</Id></Activity></Activities></TrainingCenterDatabase>');
+      const out = mapTcx(
+        '<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>run-1</Id></Activity></Activities></TrainingCenterDatabase>',
+      );
       expect(out).toHaveLength(1);
       expect(out[0]?.recordType).toBe("Session");
       expect(out[0]?.clientRecordId).toBe("run-1");

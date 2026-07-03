@@ -18,8 +18,10 @@ describe("mapHevy", () => {
   it("maps wall-clock timestamps timezone-independently", () => {
     const hevy = mapHevy(hevyCsv);
     expect(hevy[0]?.startTime, "want 2025-12-22T08:00:00Z regardless of host TZ").toBe("2025-12-22T08:00:00Z");
-    expect(mapHevy(hevyCsv, { utcOffset: "-08:00" })[0]?.startTime, "opts.utcOffset not stamped onto the wall-clock time")
-      .toBe("2025-12-22T08:00:00-08:00");
+    expect(
+      mapHevy(hevyCsv, { utcOffset: "-08:00" })[0]?.startTime,
+      "opts.utcOffset not stamped onto the wall-clock time",
+    ).toBe("2025-12-22T08:00:00-08:00");
   });
 
   // Session ids are content-derived — exporting one more workout must not renumber
@@ -35,7 +37,7 @@ describe("mapHevy", () => {
   // opaque-only.
   it("resolves exercise names through the §6.5 ladder (id + lossless opaque)", () => {
     const refs = mapHevy(hevyCsv)
-      .flatMap((s) => [...(s.exercises ?? []), ...((s.blocks ?? []).flatMap((b: any) => b.children ?? []))])
+      .flatMap((s) => [...(s.exercises ?? []), ...(s.blocks ?? []).flatMap((b: any) => b.children ?? [])])
       .map((e: any) => e.exerciseRef);
     for (const er of refs) {
       expect(er.opaque, `ref ${JSON.stringify(er)} lost the original name (no opaque)`).toBeDefined();

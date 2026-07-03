@@ -17,8 +17,10 @@ console.log(`Omissions: ${out.omissions.length} (fixture is fully representable)
 // Degraded case: a %1RM load has no absolute kg value Strong can hold. The set is still
 // emitted (reps survive) and the loss is reported machine-readably — SPEC §10's
 // directional-lossless rule. `{ strict: true }` would throw here instead.
-records[0].exercises[0].workUnits[0].performance.load =
-  { value: { relativeToThreshold: { percent: 80, of: "1RM" } }, basis: "marked_weight" };
+records[0].exercises[0].workUnits[0].performance.load = {
+  value: { relativeToThreshold: { percent: 80, of: "1RM" } },
+  basis: "marked_weight",
+};
 const degraded = mapOpenBodyToStrong(records);
 console.log("With a %1RM load injected:");
 console.log(JSON.stringify(degraded.omissions, null, 2));

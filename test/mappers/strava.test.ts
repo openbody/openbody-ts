@@ -33,15 +33,17 @@ describe("mapStrava", () => {
       }
     }
     const mean = noHr.find((r) => r.type === "heart_rate_mean");
-    expect(mean, "hr-mean aggregate should still be emitted without the stream (activity summary stands alone)").toBeDefined();
+    expect(
+      mean,
+      "hr-mean aggregate should still be emitted without the stream (activity summary stands alone)",
+    ).toBeDefined();
     expect(mean?.links, "hr-mean must not carry derivedFrom without an HR stream").toBeUndefined();
     expectAllValid(noHr);
   });
 
   it("errors clearly when the time stream is missing", () => {
     const input = sample();
-    expect(() => mapStrava({ activity: input.activity, streams: {} }))
-      .toThrow(/streams\.time/);
+    expect(() => mapStrava({ activity: input.activity, streams: {} })).toThrow(/streams\.time/);
   });
 
   describe("malformed input (behavior pinned)", () => {

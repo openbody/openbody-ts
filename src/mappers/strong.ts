@@ -31,8 +31,13 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
       // The export has no workout id of its own, so the natural key (Date|Workout Name) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering
       // would renumber everything when one more workout is exported, defeating dedup.
-      id: `strong-w-${contentHash(key)}`, recordType: "Session", subject, clientRecordId: key,
-      disciplines: ["strength"], startTime: start, endTime: end,
+      id: `strong-w-${contentHash(key)}`,
+      recordType: "Session",
+      subject,
+      clientRecordId: key,
+      disciplines: ["strength"],
+      startTime: start,
+      endTime: end,
       name: f["Workout Name"],
       extension: { "io.strong.export": { workoutNo: f["Workout No"] } },
       exercises: [] as OpenBodyRecord[],
@@ -46,16 +51,26 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
     session.exercises = exGroups.map((g, i) => ({
       // §6.5 ladder via the registry crosswalk: canonical id where one resolves, with the
       // original Strong name preserved losslessly in `opaque` (see src/resolve.ts).
-      id: `${session.id}-ex${i}`, recordType: "Exercise", exerciseRef: resolveExerciseRef(g.name ?? "", { source: "strong" }),
+      id: `${session.id}-ex${i}`,
+      recordType: "Exercise",
+      exerciseRef: resolveExerciseRef(g.name ?? "", { source: "strong" }),
       workUnits: g.sets.map((s, j) => {
-        const reps = num(s.Reps), dist = num(s.Distance), secs = num(s.Seconds), wt = num(s.Weight);
+        const reps = num(s.Reps),
+          dist = num(s.Distance),
+          secs = num(s.Seconds),
+          wt = num(s.Weight);
         const scoring = reps ? "reps" : dist ? "distance" : secs ? "time" : "reps";
         const perf: OpenBodyRecord = {};
         if (reps) perf.reps = reps;
         if (wt) perf.load = { value: wt, unit: "kg", basis: "marked_weight" };
         if (dist) perf.distance = { absolute: { value: dist, unit: "m" } };
         if (secs) perf.time = secs;
-        const wu: OpenBodyRecord = { id: `${session.id}-ex${i}-set${j}`, recordType: "WorkUnit", scoring, performance: perf };
+        const wu: OpenBodyRecord = {
+          id: `${session.id}-ex${i}-set${j}`,
+          recordType: "WorkUnit",
+          scoring,
+          performance: perf,
+        };
         if (s.Notes) wu.notes = s.Notes;
         return wu;
       }),
