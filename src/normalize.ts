@@ -4,18 +4,12 @@
 // implement this.
 // Reduces a document (a record or array of records) to a sorted set of canonical
 // record byte strings. Two documents are equivalent iff these sets are equal.
-import { canonicalString, deepCanon, type Json } from "./canonical.js";
+import { canonicalString, deepCanon, isFixedPointLike, type Json } from "./canonical.js";
 import { LosslessNumber } from "./parse.js";
+// Inline container fields by recordType (§5.1) — shared with validate.ts, see src/records.ts.
+import { CONTAINERS } from "./records.js";
 
 type Rec = Record<string, any>;
-
-// Inline container fields by recordType (§5.1). Program.sessions are refs (not inlined);
-// WorkUnit.repDetail are sub-objects (not records) — neither is flattened.
-const CONTAINERS: Record<string, string[]> = {
-  Session: ["blocks", "exercises", "workUnits"],
-  Block: ["children"],
-  Exercise: ["workUnits"],
-};
 
 // Metric-value fields and their §5.10 default units (null = dimensionless).
 const METRIC_DEFAULT_UNIT: Record<string, string | null> = {
@@ -51,18 +45,7 @@ function clone<T>(x: T): T {
 }
 
 function isScalarNumber(v: any): boolean {
-  return typeof v === "number" || v instanceof LosslessNumber || isFixedPointWire(v);
-}
-
-function isFixedPointWire(v: any): boolean {
-  return (
-    v &&
-    typeof v === "object" &&
-    !Array.isArray(v) &&
-    "coefficient" in v &&
-    "exponent" in v &&
-    Object.keys(v).length === 2
-  );
+  return typeof v === "number" || v instanceof LosslessNumber || isFixedPointLike(v);
 }
 
 // Expand a scalar metric to {absolute:{value}}; strip a unit equal to the field default.

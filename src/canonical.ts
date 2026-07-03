@@ -60,6 +60,13 @@ function decimalParts(s: string): [bigint, number] {
   return [BigInt(s), exp];
 }
 
+/**
+ * The one wire-shape predicate for a §4.2 fixed-point object, shared by
+ * normalize.ts / validate.ts / to-strong.ts. The key-count check is load-bearing
+ * and spec-correct: the schema's `fixedPoint` $def requires exactly
+ * `coefficient` + `exponent` with `additionalProperties: false`, so e.g.
+ * `{coefficient, exponent, unit}` is NOT a fixed-point number on the wire.
+ */
 export function isFixedPointLike(v: unknown): boolean {
   return (
     !!v &&

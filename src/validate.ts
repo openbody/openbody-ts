@@ -18,6 +18,9 @@
 import Ajv2020Mod from "ajv/dist/2020.js";
 import addFormatsMod from "ajv-formats";
 import schema from "../vendor/openbody.schema.json" with { type: "json" };
+import { isFixedPointLike } from "./canonical.js";
+// Inline container fields by recordType (§5.1) — shared with normalize.ts, see src/records.ts.
+import { CONTAINERS } from "./records.js";
 
 // ajv / ajv-formats are CJS; casts fix NodeNext default-import types (runtime is fine).
 const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>): any };
@@ -74,15 +77,6 @@ function validateProgramPhases(record: Record<string, any>): string[] {
   return errors;
 }
 
-// Inline container fields by recordType (§5.1) — mirrors normalize.ts's CONTAINERS,
-// duplicated locally so validate.ts stays independent of normalize.ts's internals.
-// Program.sessions are refs (not inlined), so Program is not walked into.
-const CONTAINERS: Record<string, string[]> = {
-  Session: ["blocks", "exercises", "workUnits"],
-  Block: ["children"],
-  Exercise: ["workUnits"],
-};
-
 // Visit `rec` and every record inlined beneath it (§5.1 containment).
 function forEachRecord(rec: any, visit: (r: Record<string, any>) => void): void {
   if (!rec || typeof rec !== "object") return;
@@ -92,16 +86,17 @@ function forEachRecord(rec: any, visit: (r: Record<string, any>) => void): void 
   }
 }
 
-function isFixedPointWire(v: any): boolean {
-  return v && typeof v === "object" && !Array.isArray(v) && "coefficient" in v && "exponent" in v;
-}
-
 // The discriminator key of a scalar-or-Target value (§5.10): "scalar" for a bare
 // number/fixed-point, else the one Target variant key present (absolute/range/
 // relativeToThreshold/stopCondition/ramp), ignoring the `extension` key (§5.10).
+// Fixed-point detection is the shared strict predicate (exactly 2 keys — see
+// canonical.ts): a laxer local variant used to accept {coefficient, exponent, …}
+// objects as "scalar" here while normalize.ts did not, a semantics drift. A 3-key
+// object is schema-invalid anyway (fixedPoint sets additionalProperties: false),
+// so these semantic checks — which only run after ajv passes — see no such value.
 function targetVariant(v: any): string | undefined {
   if (v === undefined || v === null) return undefined;
-  if (typeof v === "number" || isFixedPointWire(v)) return "scalar";
+  if (typeof v === "number" || isFixedPointLike(v)) return "scalar";
   if (typeof v === "object") {
     for (const k of Object.keys(v)) if (k !== "extension") return k;
   }
