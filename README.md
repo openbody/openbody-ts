@@ -19,7 +19,12 @@ records, plus a conformance-vector runner.
 - **`equivalent(a, b)`** — true iff two documents normalize to the same set.
 - **`src/mappers/`** — incumbent → OpenBody mappers (Hevy, Strong, Strava, Apple Health,
   FIT; Health Connect via the Apple mapper): pure functions with round-trip tests
-  (`npm run mappers`). Plus one outbound mapper, OpenBody → Strong CSV
+  (`npm run mappers`). Plus format-level **GPX + TCX** mappers (`mapGpx`/`mapTcx` —
+  covers Runkeeper, Komoot, AllTrails, Ride with GPS, MapMyRun, Garmin/Polar legacy
+  exports): trackpoint streams → multi-channel location + HR/cadence/power
+  `sampleArray` Measurements, TCX laps → per-lap WorkUnits, all linked via
+  `measuredBy` (`npm run tcx-gpx`; built against the official schemas — verify against
+  real platform exports, OB-79). Plus one outbound mapper, OpenBody → Strong CSV
   (`mapOpenBodyToStrong`) — the import path into Strong *and* Hevy (which accepts
   Strong-format CSVs). Covers everything Strong's CSV can hold: reps ± weight,
   bodyweight, duration and distance sets, RPE, notes — with non-kg/m/s units converted

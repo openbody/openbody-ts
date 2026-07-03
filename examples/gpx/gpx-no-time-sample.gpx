@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Degenerate-case sample: a GPX 1.1 track whose trackpoints carry NO timestamps -
+  the shape route-planning tools (Komoot/AllTrails "download route as GPX",
+  drawn-not-recorded tracks) commonly export. Hand-built against the official
+  GPX 1.1 schema (https://www.topografix.com/GPX/1/1/gpx.xsd); "time" is optional
+  on trkpt there. The mapper cannot emit a sampleArray without timing (SPEC section 4.3
+  requires frequencyHz or offsets), so this maps to a Session with the geometry
+  preserved in extension.gpx.untimedTrack. Synthetic; verify against real platform
+  exports (OB-79 acceptance).
+-->
+<gpx version="1.1" creator="AllTrails"
+     xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <trk>
+    <name>Untimed Trail</name>
+    <type>hiking</type>
+    <trkseg>
+      <trkpt lat="46.578400" lon="8.006540"><ele>1932.0</ele></trkpt>
+      <trkpt lat="46.579100" lon="8.007300"><ele>1948.5</ele></trkpt>
+      <trkpt lat="46.579800" lon="8.008100"><ele>1961.2</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

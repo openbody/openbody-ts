@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample TCX file for the OpenBody TCX mapper (OB-79).
+  Provenance: hand-built against Garmin's official TrainingCenterDatabase v2 XSD
+  (https://www8.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd) and
+  ActivityExtension v2 XSD (https://www8.garmin.com/xmlschemas/ActivityExtensionv2.xsd),
+  following the canonical Garmin Connect export shape (Activity/Id/Lap/Track/
+  Trackpoint, Creator Device_t, ns3:TPX extensions). One Running activity, two laps
+  (the second marked Intensity Resting - a recovery interval), trackpoints with
+  Position/Altitude/HeartRateBpm/Cadence and running power via ns3:TPX Watts
+  (Stryd-style); one trackpoint has no Position (GPS dropout, null location row).
+  Synthetic, not a real device export - verify against real Garmin/Polar/MapMyRun
+  exports (OB-79 acceptance).
+-->
+<TrainingCenterDatabase
+    xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"
+    xsi:schemaLocation="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 https://www8.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd">
+  <Activities>
+    <Activity Sport="Running">
+      <Id>2010-06-26T10:06:11Z</Id>
+      <Lap StartTime="2010-06-26T10:06:11Z">
+        <TotalTimeSeconds>15.0</TotalTimeSeconds>
+        <DistanceMeters>50.0</DistanceMeters>
+        <MaximumSpeed>3.5</MaximumSpeed>
+        <Calories>4</Calories>
+        <AverageHeartRateBpm><Value>133</Value></AverageHeartRateBpm>
+        <MaximumHeartRateBpm><Value>138</Value></MaximumHeartRateBpm>
+        <Intensity>Active</Intensity>
+        <Cadence>85</Cadence>
+        <TriggerMethod>Manual</TriggerMethod>
+        <Track>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:11Z</Time>
+            <Position>
+              <LatitudeDegrees>52.148746</LatitudeDegrees>
+              <LongitudeDegrees>4.494590</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>3.4</AltitudeMeters>
+            <DistanceMeters>0.0</DistanceMeters>
+            <HeartRateBpm><Value>128</Value></HeartRateBpm>
+            <Cadence>83</Cadence>
+            <Extensions>
+              <ns3:TPX>
+                <ns3:Speed>3.2</ns3:Speed>
+                <ns3:Watts>245</ns3:Watts>
+              </ns3:TPX>
+            </Extensions>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:16Z</Time>
+            <Position>
+              <LatitudeDegrees>52.148855</LatitudeDegrees>
+              <LongitudeDegrees>4.494700</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>3.6</AltitudeMeters>
+            <DistanceMeters>16.5</DistanceMeters>
+            <HeartRateBpm><Value>133</Value></HeartRateBpm>
+            <Cadence>85</Cadence>
+            <Extensions>
+              <ns3:TPX>
+                <ns3:Speed>3.4</ns3:Speed>
+                <ns3:Watts>252</ns3:Watts>
+              </ns3:TPX>
+            </Extensions>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:21Z</Time>
+            <Position>
+              <LatitudeDegrees>52.148966</LatitudeDegrees>
+              <LongitudeDegrees>4.494812</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>3.8</AltitudeMeters>
+            <DistanceMeters>33.2</DistanceMeters>
+            <HeartRateBpm><Value>138</Value></HeartRateBpm>
+            <Cadence>86</Cadence>
+            <Extensions>
+              <ns3:TPX>
+                <ns3:Speed>3.5</ns3:Speed>
+                <ns3:Watts>258</ns3:Watts>
+              </ns3:TPX>
+            </Extensions>
+          </Trackpoint>
+        </Track>
+      </Lap>
+      <Lap StartTime="2010-06-26T10:06:26Z">
+        <TotalTimeSeconds>20.0</TotalTimeSeconds>
+        <DistanceMeters>65.0</DistanceMeters>
+        <MaximumSpeed>3.8</MaximumSpeed>
+        <Calories>6</Calories>
+        <AverageHeartRateBpm><Value>147</Value></AverageHeartRateBpm>
+        <MaximumHeartRateBpm><Value>150</Value></MaximumHeartRateBpm>
+        <Intensity>Resting</Intensity>
+        <TriggerMethod>Manual</TriggerMethod>
+        <Track>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:26Z</Time>
+            <Position>
+              <LatitudeDegrees>52.149078</LatitudeDegrees>
+              <LongitudeDegrees>4.494925</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>4.0</AltitudeMeters>
+            <DistanceMeters>50.0</DistanceMeters>
+            <HeartRateBpm><Value>145</Value></HeartRateBpm>
+            <Cadence>84</Cadence>
+            <Extensions>
+              <ns3:TPX>
+                <ns3:Speed>3.6</ns3:Speed>
+                <ns3:Watts>260</ns3:Watts>
+              </ns3:TPX>
+            </Extensions>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:31Z</Time>
+            <AltitudeMeters>4.1</AltitudeMeters>
+            <DistanceMeters>66.0</DistanceMeters>
+            <HeartRateBpm><Value>150</Value></HeartRateBpm>
+            <Cadence>85</Cadence>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2010-06-26T10:06:41Z</Time>
+            <Position>
+              <LatitudeDegrees>52.149298</LatitudeDegrees>
+              <LongitudeDegrees>4.495152</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>4.3</AltitudeMeters>
+            <DistanceMeters>98.7</DistanceMeters>
+            <HeartRateBpm><Value>148</Value></HeartRateBpm>
+            <Cadence>82</Cadence>
+            <Extensions>
+              <ns3:TPX>
+                <ns3:Speed>3.3</ns3:Speed>
+                <ns3:Watts>241</ns3:Watts>
+              </ns3:TPX>
+            </Extensions>
+          </Trackpoint>
+        </Track>
+      </Lap>
+      <Creator xsi:type="Device_t">
+        <Name>Garmin Forerunner 305</Name>
+        <UnitId>0</UnitId>
+        <ProductID>484</ProductID>
+        <Version>
+          <VersionMajor>3</VersionMajor>
+          <VersionMinor>0</VersionMinor>
+          <BuildMajor>0</BuildMajor>
+          <BuildMinor>0</BuildMinor>
+        </Version>
+      </Creator>
+    </Activity>
+  </Activities>
+</TrainingCenterDatabase>

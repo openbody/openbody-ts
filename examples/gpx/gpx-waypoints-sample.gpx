@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Degenerate-case sample: a waypoint-only GPX file (no track at all) - the shape a
+  POI/geocache export produces. Deliberately GPX 1.0 (not 1.1) to exercise the
+  mapper's version tolerance: waypoints are borrowed from TopoGrafix's own public
+  GPX 1.0 sample fells_loop.gpx (https://www.topografix.com/gpx/fells_loop.gpx,
+  first three waypoints, abbreviated). Waypoints are map annotations, not
+  observations of a subject, so the mapper reports this gracefully by returning an
+  empty document. Verify against real platform exports (OB-79 acceptance).
+-->
+<gpx version="1.0" creator="EasyGPS 1.3.7 - https://www.topografix.com"
+     xmlns="http://www.topografix.com/GPX/1/0"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+  <wpt lat="42.438878" lon="-71.119277">
+    <ele>44.586548</ele>
+    <time>2001-11-28T21:05:28Z</time>
+    <name>5066</name>
+    <desc>5066</desc>
+    <sym>Crossing</sym>
+  </wpt>
+  <wpt lat="42.439227" lon="-71.119689">
+    <ele>57.607200</ele>
+    <time>2001-06-02T03:26:55Z</time>
+    <name>5067</name>
+    <desc>5067</desc>
+    <sym>Dot</sym>
+  </wpt>
+  <wpt lat="42.438917" lon="-71.116146">
+    <ele>35.492432</ele>
+    <time>2001-11-16T23:03:38Z</time>
+    <name>5096</name>
+    <desc>5096</desc>
+    <sym>Dot</sym>
+  </wpt>
+</gpx>

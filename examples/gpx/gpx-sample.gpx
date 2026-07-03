@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample GPX 1.1 file for the OpenBody GPX mapper (OB-79).
+  Provenance: hand-built against the official GPX 1.1 schema
+  (https://www.topografix.com/GPX/1/1/gpx.xsd). Base track coordinates/elevations/
+  timestamps are the public GPX example from Wikipedia's "GPS Exchange Format"
+  article (lat 47.644548 lon -122.326897 …), extended with: a second track segment
+  (a pause, as real recorders emit), heart-rate/cadence per Garmin's
+  TrackPointExtension v2 XSD (https://www8.garmin.com/xmlschemas/TrackPointExtensionv2.xsd),
+  one point without an elevation (null alt channel), and one without cadence
+  (null sample). Synthetic, not a real platform export - verify against real
+  Runkeeper/Komoot/AllTrails/Ride with GPS exports (OB-79 acceptance).
+-->
+<gpx version="1.1" creator="RunKeeper"
+     xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v2"
+     xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <time>2009-10-17T18:37:26Z</time>
+  </metadata>
+  <trk>
+    <name>Example GPX Document</name>
+    <type>running</type>
+    <trkseg>
+      <trkpt lat="47.644548" lon="-122.326897">
+        <ele>4.46</ele>
+        <time>2009-10-17T18:37:26Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>128</gpxtpx:hr>
+            <gpxtpx:cad>84</gpxtpx:cad>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="47.644600" lon="-122.326700">
+        <ele>4.94</ele>
+        <time>2009-10-17T18:37:31Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>132</gpxtpx:hr>
+            <gpxtpx:cad>86</gpxtpx:cad>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="47.644700" lon="-122.326600">
+        <ele>6.87</ele>
+        <time>2009-10-17T18:37:34Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>135</gpxtpx:hr>
+            <gpxtpx:cad>87</gpxtpx:cad>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+    </trkseg>
+    <trkseg>
+      <trkpt lat="47.644800" lon="-122.326500">
+        <ele>7.10</ele>
+        <time>2009-10-17T18:39:04Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>121</gpxtpx:hr>
+            <gpxtpx:cad>82</gpxtpx:cad>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="47.644900" lon="-122.326300">
+        <time>2009-10-17T18:39:09Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>124</gpxtpx:hr>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>
