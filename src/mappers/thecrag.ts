@@ -103,6 +103,11 @@ function exerciseRefFor(gearStyle: string, ascentType: string): OpenBodyRecord {
   return { opaque };
 }
 
+// Outcome encoding (§5.18 / conformance/corpus/climbing-send-attempt.valid.json):
+// `kind` names the outcome DIMENSION being judged, `value` the result on it. So a
+// failed attempt is `{ kind: "success", value: false }` — "was it a success? no" —
+// which reads like a contradiction but is the spec's canonical climbing encoding.
+// Do NOT "fix" this by inventing a `kind: "failure"`.
 function outcomeFor(ascentType: string): OpenBodyRecord | undefined {
   const t = ascentType.toLowerCase();
   if (FIRST_TRY.has(t)) return { kind: "success", value: true, attempts: { made: 1, attempted: 1 } };
