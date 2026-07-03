@@ -1,0 +1,61 @@
+[ {
+  "dateTime" : "01/06/24 07:00:01",
+  "value" : {
+    "bpm" : 76,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:00:06",
+  "value" : {
+    "bpm" : 78,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:00:11",
+  "value" : {
+    "bpm" : 81,
+    "confidence" : 2
+  }
+}, {
+  "dateTime" : "01/06/24 07:00:21",
+  "value" : {
+    "bpm" : 88,
+    "confidence" : 2
+  }
+}, {
+  "dateTime" : "01/06/24 07:00:31",
+  "value" : {
+    "bpm" : 94,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:00:46",
+  "value" : {
+    "bpm" : 103,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:01:01",
+  "value" : {
+    "bpm" : 112,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:01:16",
+  "value" : {
+    "bpm" : 121,
+    "confidence" : 2
+  }
+}, {
+  "dateTime" : "01/06/24 07:01:31",
+  "value" : {
+    "bpm" : 128,
+    "confidence" : 3
+  }
+}, {
+  "dateTime" : "01/06/24 07:01:46",
+  "value" : {
+    "bpm" : 133,
+    "confidence" : 3
+  }
+} ]

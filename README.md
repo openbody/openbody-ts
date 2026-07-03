@@ -24,7 +24,12 @@ records, plus a conformance-vector runner.
   exports): trackpoint streams → multi-channel location + HR/cadence/power
   `sampleArray` Measurements, TCX laps → per-lap WorkUnits, all linked via
   `measuredBy` (`npm run tcx-gpx`; built against the official schemas — verify against
-  real platform exports, OB-79). Plus one outbound mapper, OpenBody → Strong CSV
+  real platform exports, OB-79). And **Fitbit (Google Takeout)** — `mapFitbitTakeout`
+  takes the Takeout folder's JSON files (exercise/steps/heart_rate/sleep/weight/
+  resting-heart-rate): Sessions + per-day `sampleArray` series + adjacent sleep-stage
+  `category` intervals (short wakes spliced in), exact fixed-point weights
+  (`npm run fitbit`; built against publicly documented Takeout structure — verify with
+  a real Takeout, OB-80). Plus one outbound mapper, OpenBody → Strong CSV
   (`mapOpenBodyToStrong`) — the import path into Strong *and* Hevy (which accepts
   Strong-format CSVs). Covers everything Strong's CSV can hold: reps ± weight,
   bodyweight, duration and distance sets, RPE, notes — with non-kg/m/s units converted

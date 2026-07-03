@@ -1,0 +1,79 @@
+[ {
+  "logId" : 21092332392,
+  "activityName" : "Run",
+  "activityTypeId" : 90009,
+  "activityLevel" : [ {
+    "minutes" : 0,
+    "name" : "sedentary"
+  }, {
+    "minutes" : 0,
+    "name" : "lightly"
+  }, {
+    "minutes" : 1,
+    "name" : "fairly"
+  }, {
+    "minutes" : 30,
+    "name" : "very"
+  } ],
+  "averageHeartRate" : 149,
+  "calories" : 306,
+  "distance" : 5.28,
+  "distanceUnit" : "Kilometer",
+  "duration" : 1843000,
+  "activeDuration" : 1843000,
+  "steps" : 4510,
+  "logType" : "auto_detected",
+  "manualValuesSpecified" : {
+    "calories" : false,
+    "distance" : false,
+    "steps" : false
+  },
+  "heartRateZones" : [ {
+    "name" : "Out of Range",
+    "min" : 30,
+    "max" : 99,
+    "minutes" : 1
+  }, {
+    "name" : "Fat Burn",
+    "min" : 99,
+    "max" : 140,
+    "minutes" : 5
+  }, {
+    "name" : "Cardio",
+    "min" : 140,
+    "max" : 170,
+    "minutes" : 24
+  }, {
+    "name" : "Peak",
+    "min" : 170,
+    "max" : 220,
+    "minutes" : 1
+  } ],
+  "lastModified" : "01/06/24 07:45:00",
+  "startTime" : "01/06/24 07:08:57",
+  "originalStartTime" : "01/06/24 07:08:57",
+  "originalDuration" : 1843000,
+  "elevationGain" : 67.056,
+  "hasGps" : false,
+  "shouldFetchDetails" : false
+}, {
+  "logId" : 21092332999,
+  "activityName" : "Elliptical",
+  "activityTypeId" : 20047,
+  "averageHeartRate" : null,
+  "calories" : 180,
+  "duration" : 1200000,
+  "activeDuration" : 1200000,
+  "logType" : "manual",
+  "manualValuesSpecified" : {
+    "calories" : true,
+    "distance" : false,
+    "steps" : false
+  },
+  "lastModified" : "01/07/24 18:25:00",
+  "startTime" : "01/07/24 18:00:00",
+  "originalStartTime" : "01/07/24 18:00:00",
+  "originalDuration" : 1200000,
+  "hasGps" : false,
+  "shouldFetchDetails" : false
+} ]

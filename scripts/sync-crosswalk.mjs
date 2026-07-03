@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 // Only app alias tables are bundled (dataset crosswalks like free-exercise-db.json are
 // registry work-lists, not runtime lookup tables — and would bloat browser bundles).
-const APP_SOURCES = ["hevy", "strong"];
+const APP_SOURCES = ["hevy", "strong", "liftosaur", "fitnotes", "jefit"];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registryDir = process.env.OPENBODY_REGISTRY
