@@ -8,8 +8,14 @@ import { canonicalString, deepCanon, isFixedPointLike, type Json } from "./canon
 import { LosslessNumber } from "./parse.js";
 // Inline container fields by recordType (§5.1) — shared with validate.ts, see src/records.ts.
 import { CONTAINERS } from "./records.js";
+import type { OpenBodyRecord, WireRecord } from "./types.js";
 
-type Rec = Record<string, any>;
+// Normalization works on LosslessNumber-bearing parse trees (parseLossless), mutating them
+// field-by-field — the deliberately dynamic layer, so records stay WireRecord-loose here.
+type Rec = WireRecord;
+
+/** What `normalizeDocument`/`equivalent` accept: typed wire records, or a raw (lossless-)parsed JSON tree. */
+export type NormalizeInput = OpenBodyRecord | readonly OpenBodyRecord[] | Json;
 
 // Metric-value fields and their §5.10 default units (null = dimensionless).
 const METRIC_DEFAULT_UNIT: Record<string, string | null> = {
@@ -37,26 +43,28 @@ function clone<T>(x: T): T {
   if (x instanceof LosslessNumber) return x;
   if (Array.isArray(x)) return x.map(clone) as unknown as T;
   if (x && typeof x === "object") {
-    const out: Record<string, any> = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(x)) out[k] = clone(v);
     return out as T;
   }
   return x;
 }
 
-function isScalarNumber(v: any): boolean {
+function isScalarNumber(v: unknown): boolean {
   return typeof v === "number" || v instanceof LosslessNumber || isFixedPointLike(v);
 }
 
 // Expand a scalar metric to {absolute:{value}}; strip a unit equal to the field default.
-function expandMetric(field: string, v: any): any {
+function expandMetric(field: string, v: unknown): unknown {
   if (v === null || v === undefined) return v;
   if (isScalarNumber(v)) return { absolute: { value: v } };
   if (typeof v === "object") {
     const def = METRIC_DEFAULT_UNIT[field];
     if (def) {
-      if (v.absolute && v.absolute.unit === def) delete v.absolute.unit;
-      if (v.range && v.range.unit === def) delete v.range.unit;
+      // Loose read of the Target variants being rewritten (LosslessNumber-bearing tree).
+      const t = v as { absolute?: Rec; range?: Rec };
+      if (t.absolute && t.absolute.unit === def) delete t.absolute.unit;
+      if (t.range && t.range.unit === def) delete t.range.unit;
       // `ramp` is not a legal variant on these fields (§5.10 — restricted to
       // `load.value`/`Intensity.value`, handled separately below); no ramp handling here.
     }
@@ -113,7 +121,7 @@ function transformMetricsObj(obj: Rec | undefined): void {
   // effortLoad values are plain numbers — number canon (deepCanon) handles them.
 }
 
-function transformRepDetail(arr: any[] | undefined): void {
+function transformRepDetail(arr: Rec[] | undefined): void {
   if (!Array.isArray(arr)) return;
   for (const rep of arr) for (const f of ["velocity", "rangeOfMotion"]) if (f in rep) rep[f] = expandMetric(f, rep[f]);
 }
@@ -130,7 +138,7 @@ function foldExerciseRef(rec: Rec): void {
 
 function addPartOf(rec: Rec, parentId: string): void {
   rec.links = rec.links || [];
-  if (!rec.links.some((l: any) => l?.type === "partOf" && l.ref === parentId)) {
+  if (!rec.links.some((l: Rec) => l?.type === "partOf" && l.ref === parentId)) {
     rec.links.push({ type: "partOf", ref: parentId });
   }
 }
@@ -146,7 +154,7 @@ function stripIds(rec: Rec): void {
 // Inject a round's value into each descendant WorkUnit whose primary metric is absent
 // (§5.4/§5.8). Stops at a nested Block that carries its own roundScheme (it injects its
 // own). The value lands in `prescription` — roundScheme is a planned shorthand.
-function injectRoundMetric(rec: Rec, value: any): void {
+function injectRoundMetric(rec: Rec, value: unknown): void {
   if (rec?.recordType === "WorkUnit") {
     const metric = SCORING_PRIMARY_METRIC[rec.scoring];
     if (metric) {
@@ -172,9 +180,9 @@ function expandRoundScheme(block: Rec): void {
   const where = block.id ?? "?";
   if (block.repetitions !== undefined) throw new Error(`Block ${where}: roundScheme+repetitions is invalid (§5.4)`);
   if (block.performance !== undefined) throw new Error(`Block ${where}: roundScheme+performance is invalid (§5.4)`);
-  const src: any[] = Array.isArray(block.children) ? block.children : [];
-  const out: any[] = [];
-  rs.forEach((v: any, r: number) => {
+  const src: Rec[] = Array.isArray(block.children) ? block.children : [];
+  const out: Rec[] = [];
+  rs.forEach((v: unknown, r: number) => {
     for (const child of src) {
       const c = clone(child);
       injectRoundMetric(c, v);
@@ -187,8 +195,8 @@ function expandRoundScheme(block: Rec): void {
 }
 
 // EQUIVALENCE.md step 5: expand `sets:N` into N WorkUnits (1st keeps id+position; rest id-less, after).
-function expandSets(arr: any[]): any[] {
-  const out: any[] = [];
+function expandSets(arr: Rec[]): Rec[] {
+  const out: Rec[] = [];
   for (const item of arr) {
     const p = item?.recordType === "WorkUnit" ? item.prescription : undefined;
     const raw = p ? p.sets : undefined;
@@ -257,7 +265,7 @@ function flatten(rec: Rec, ctx: Ctx, out: Rec[]): void {
 }
 
 /** Normalize a document to a sorted array of canonical record byte strings. */
-export function normalizeDocument(doc: Json): string[] {
+export function normalizeDocument(doc: NormalizeInput): string[] {
   const inputs = Array.isArray(doc) ? doc : [doc];
   const flat: Rec[] = [];
   for (const rec of inputs) flatten(clone(rec) as Rec, {}, flat);
@@ -265,7 +273,7 @@ export function normalizeDocument(doc: Json): string[] {
 }
 
 /** True iff two documents normalize to the same set of canonical records (EQUIVALENCE.md). */
-export function equivalent(a: Json, b: Json): boolean {
+export function equivalent(a: NormalizeInput, b: NormalizeInput): boolean {
   const na = normalizeDocument(a);
   const nb = normalizeDocument(b);
   return na.length === nb.length && na.every((s, i) => s === nb[i]);

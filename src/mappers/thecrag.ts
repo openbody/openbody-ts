@@ -54,7 +54,15 @@
 //   The raw gear style always rides in `exerciseRef.opaque` (§6.5 lossless floor);
 //   `Ascent Gear Style` (as climbed) wins over `Route Gear Style`.
 
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type ExerciseRefObject,
+  type LiveRecord,
+  type MapOptions,
+  type Outcome,
+  type Performance,
+  type WorkUnit,
+} from "../types.js";
 import { parseCsv, toRfc3339 } from "./csv.js";
 
 const FIRST_TRY = new Set(["onsight", "flash", "top rope onsight", "top rope flash", "greenpoint onsight"]);
@@ -92,7 +100,7 @@ const NOT_SENT = new Set([
 const TOP_ROPE_TYPES = /^(top rope|second|ghost)\b/;
 const GENERIC_ROUTE_STYLES = new Set(["aid", "alpine", "free solo", "deep water solo", "ice", "mixed"]);
 
-function exerciseRefFor(gearStyle: string, ascentType: string): OpenBodyRecord {
+function exerciseRefFor(gearStyle: string, ascentType: string): ExerciseRefObject {
   const g = gearStyle.toLowerCase(),
     t = ascentType.toLowerCase();
   const opaque = gearStyle || ascentType || "climb";
@@ -108,7 +116,7 @@ function exerciseRefFor(gearStyle: string, ascentType: string): OpenBodyRecord {
 // failed attempt is `{ kind: "success", value: false }` — "was it a success? no" —
 // which reads like a contradiction but is the spec's canonical climbing encoding.
 // Do NOT "fix" this by inventing a `kind: "failure"`.
-function outcomeFor(ascentType: string): OpenBodyRecord | undefined {
+function outcomeFor(ascentType: string): Outcome | undefined {
   const t = ascentType.toLowerCase();
   if (FIRST_TRY.has(t)) return { kind: "success", value: true, attempts: { made: 1, attempted: 1 } };
   if (CLEAN.has(t)) return { kind: "success", value: true };
@@ -117,7 +125,7 @@ function outcomeFor(ascentType: string): OpenBodyRecord | undefined {
 }
 
 /** Map a theCrag logbook CSV export to OpenBody wire records (one Session per date+crag). */
-export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapTheCrag(csv: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
 
@@ -130,7 +138,7 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[]
     sessions.set(k, [...(sessions.get(k) ?? []), r]);
   }
 
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
   let sIdx = 0;
   for (const [, srows] of sessions) {
     sIdx++;
@@ -151,11 +159,11 @@ export function mapTheCrag(csv: string, opts: MapOptions = {}): OpenBodyRecord[]
       const grade = r["Ascent Grade"] || r["Route Grade"] || "";
       const outcome = outcomeFor(ascentType);
 
-      const performance: OpenBodyRecord = { reps: 1 };
+      const performance: Performance = { reps: 1 };
       if (grade) performance.modifiers = [{ type: "grade", value: grade }];
       if (outcome) performance.outcome = outcome;
 
-      const wu: OpenBodyRecord = {
+      const wu: WorkUnit = {
         id: r["Ascent ID"] ? `${sid}-a${r["Ascent ID"]}` : `${sid}-a${j + 1}`,
         recordType: "WorkUnit",
         ...(r["Ascent ID"] ? { clientRecordId: r["Ascent ID"] } : {}),

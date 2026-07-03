@@ -9,12 +9,15 @@ import {
   collectExerciseRefIds,
   expectValidAndStable,
   haveRegistry,
+  ofKind,
   readExample,
+  refObj,
   registryExercisesPath,
 } from "../helpers.js";
 
 const crag = mapTheCrag(readExample("thecrag/thecrag-sample.csv"));
-const wus = crag.flatMap((s) => s.workUnits ?? []);
+const sessions = ofKind(crag, "Session");
+const wus = sessions.flatMap((s) => s.workUnits ?? []);
 const byRoute = (name: string) => wus.find((w) => typeof w.notes === "string" && w.notes.startsWith(name));
 
 describe("mapTheCrag", () => {
@@ -61,7 +64,7 @@ describe("mapTheCrag", () => {
 
   it("gear style (+ ascent type) picks the climb.* exerciseRef", () => {
     const expectRef = (route: string, id: string) => {
-      expect(byRoute(route)?.exerciseRef?.id, route).toBe(id);
+      expect(refObj(byRoute(route)?.exerciseRef).id, route).toBe(id);
     };
     expectRef("The Bard", "climb.route.lead"); // Trad, led
     expectRef("Kachoong", "climb.route.lead"); // Sport, led
@@ -83,8 +86,8 @@ describe("mapTheCrag", () => {
   });
 
   it("groups by date + crag with honest disciplines and TZ-safe dates", () => {
-    const day1 = crag.find((s) => s.name === "Arapiles");
-    const day2 = crag.find((s) => s.name === "Hollow Mountain Cave");
+    const day1 = sessions.find((s) => s.name === "Arapiles");
+    const day2 = sessions.find((s) => s.name === "Hollow Mountain Cave");
     expect(day1?.startTime, "an offset-carrying Ascent Date must pass through untouched by the host TZ").toBe(
       "2026-05-16T00:00:00Z",
     );
@@ -111,7 +114,7 @@ describe("mapTheCrag", () => {
       expect(mapTheCrag("")).toEqual([]);
     });
     it("rows missing the expected columns do not throw (one degraded session out)", () => {
-      const out = mapTheCrag("a,b\n1,2");
+      const out = ofKind(mapTheCrag("a,b\n1,2"), "Session");
       expect(out).toHaveLength(1);
       expect(out[0]?.recordType).toBe("Session");
       expect(out[0]?.startTime).toBeUndefined(); // no Ascent Date column

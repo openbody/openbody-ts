@@ -3,7 +3,7 @@
 // parity); this mapper covers both shapes. Everything lives in element attributes
 // (<Record .../> / <Workout .../> are usually self-closing), parsed with the shared
 // regex-XML helpers (src/mappers/xml.ts — no DOM, zero deps).
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type LiveRecord, type MapOptions, type Performance, type Provenance } from "../types.js";
 import { makeDisciplineMapper } from "./shared.js";
 import { els } from "./xml.js";
 
@@ -29,15 +29,19 @@ const qtyFor = makeDisciplineMapper(QTY, "apple");
 const discFor = makeDisciplineMapper(DISC, "apple");
 
 /** Map an Apple Health export.xml string to OpenBody wire records. */
-export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapAppleHealth(xml: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
   const hrRecords: { ref: string; s: number; e: number }[] = [];
   let i = 0;
 
   for (const { attrs: a } of els(xml, "Record")) {
     i++;
-    const prov = { method: "sensor", sourceApp: "apple", device: { manufacturer: "apple", model: a.sourceName } };
+    const prov: Provenance = {
+      method: "sensor",
+      sourceApp: "apple",
+      device: { manufacturer: "apple", model: a.sourceName },
+    };
     if (a.type?.startsWith("HKQuantityTypeIdentifier")) {
       const id = `apple-q-${i}`;
       records.push({
@@ -77,7 +81,7 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): OpenBodyReco
     const start = rfc(a.startDate ?? ""),
       end = rfc(a.endDate ?? "");
     const durSec = a.durationUnit === "min" ? Number(a.duration) * 60 : Number(a.duration);
-    const perf: OpenBodyRecord = {};
+    const perf: Performance = {};
     if (a.totalDistance) perf.distance = { absolute: { value: Number(a.totalDistance), unit: a.totalDistanceUnit } };
     if (a.totalEnergyBurned)
       perf.energy = { absolute: { value: Number(a.totalEnergyBurned), unit: a.totalEnergyBurnedUnit } };

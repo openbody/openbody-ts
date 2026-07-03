@@ -36,7 +36,15 @@
 // UTC (mapped with "Z"); everything else is local wall-clock time — pass opts.utcOffset
 // (e.g. "-07:00") to stamp those, else they too default to "Z". Known deliberate loss: the
 // per-sample HR `confidence` (0–3 quality flag) is dropped from the heart_rate sampleArray.
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type Link,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Provenance,
+  type WireRecord,
+} from "../types.js";
 import { makeDisciplineMapper } from "./shared.js";
 
 export interface FitbitFile {
@@ -106,7 +114,8 @@ const fixed = (n: number): number | { coefficient: number; exponent: number } =>
     : { coefficient: Number(s.replace(".", "")), exponent: dot + 1 - s.length };
 };
 
-const parseArray = (text: string): Record<string, any>[] => {
+// WireRecord-loose: raw Takeout JSON rows, not OpenBody records — accessed dynamically below.
+const parseArray = (text: string): WireRecord[] => {
   try {
     const v = JSON.parse(text);
     return Array.isArray(v) ? v : [];
@@ -117,13 +126,13 @@ const parseArray = (text: string): Record<string, any>[] => {
 const basename = (name: string) => name.split("/").pop() ?? name;
 
 /** Map any subset of a Google Takeout Fitbit folder ({ name, text } JSON files) to OpenBody wire records. */
-export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): OpenBodyRecord[] {
+export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const off = opts.utcOffset ?? "Z";
-  const records: OpenBodyRecord[] = [];
-  const prov = (method: string) => ({ method, sourceApp: "fitbit" });
+  const records: LiveRecord[] = [];
+  const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fitbit" });
   // §7.4: derived summaries Fitbit computed on-device/server; version is not published.
-  const summaryAlg = (name: string) => ({
+  const summaryAlg = (name: string): Provenance => ({
     method: "algorithm",
     sourceApp: "fitbit",
     algorithm: { name, version: "takeout" },
@@ -173,7 +182,7 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         const start = startIso + off,
           end = isoAt(epoch(startIso) + durMs) + off;
         const sid = `fitbit-ex-${x.logId}`;
-        const measuredBy: { type: string; ref: string }[] = [];
+        const measuredBy: Link[] = [];
         if (x.averageHeartRate != null) {
           records.push({
             id: `${sid}-hr-mean`,
@@ -202,8 +211,8 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
           });
           measuredBy.push({ type: "measuredBy", ref: `${sid}-steps` });
         }
-        const extra: Record<string, any> = {};
-        const perf: Record<string, any> = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
+        const extra: Record<string, unknown> = {};
+        const perf: Performance = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
         if (x.distance != null) {
           const unit = DIST_UNIT[x.distanceUnit];
           // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
@@ -263,12 +272,12 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         // short (≤3 min) wakes that OVERLAP it — physiologically real wakes, so splice them
         // in: punch each short wake out of the underlying stage and insert an awake interval.
         let segs: { s: number; e: number; level: string }[] = (log.levels?.data ?? [])
-          .map((d: any) => {
+          .map((d: WireRecord) => {
             const s = epoch(String(d.dateTime));
             return { s, e: s + Number(d.seconds) * 1000, level: String(d.level) };
           })
-          .filter((g: any) => Number.isFinite(g.s) && g.e > g.s)
-          .sort((a: any, b: any) => a.s - b.s);
+          .filter((g: { s: number; e: number }) => Number.isFinite(g.s) && g.e > g.s)
+          .sort((a: { s: number }, b: { s: number }) => a.s - b.s);
         for (const sd of log.levels?.shortData ?? []) {
           const s = epoch(String(sd.dateTime)),
             e = s + Number(sd.seconds) * 1000;
@@ -340,7 +349,7 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
         // Takeout weight is exported in pounds regardless of profile units (community-
         // documented); kept as UCUM [lb_av] rather than converted — lossless per §4.2.
         const aria = typeof x.source === "string" && x.source.toLowerCase() === "aria";
-        const p = {
+        const p: Provenance = {
           method: aria ? "sensor" : "manual",
           sourceApp: "fitbit",
           ...(aria ? { device: { manufacturer: "fitbit", model: x.source } } : {}),

@@ -6,15 +6,18 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { mapConcept2 } from "../../src/mappers/concept2.js";
 import {
+  abs,
   collectExerciseRefIds,
   expectValidAndStable,
   haveRegistry,
+  ofKind,
   readExample,
+  refObj,
   registryExercisesPath,
 } from "../helpers.js";
 
 const c2 = mapConcept2(readExample("concept2/concept2-season-sample.csv"));
-const sess = (name: string) => c2.find((r) => r.recordType === "Session" && r.name === name);
+const sess = (name: string) => ofKind(c2, "Session").find((r) => r.name === name);
 
 describe("mapConcept2", () => {
   it("maps the season sample to valid, round-trip-stable wire records", () => {
@@ -27,22 +30,22 @@ describe("mapConcept2", () => {
     const twoK = sess("2000m row");
     const wu = twoK?.workUnits?.[0];
     expect(wu?.scoring).toBe("distance");
-    expect(wu?.performance?.distance?.absolute?.value).toBe(2000);
+    expect(abs(wu?.performance?.distance)?.value).toBe(2000);
     expect(wu?.performance?.time, "distance-scored unit must not carry a time metric (§5.5)").toBeUndefined();
     expect(twoK?.extension?.concept2?.workTimeSeconds).toBe(465.3);
-    const cad = wu?.performance?.intensity?.find((x: any) => x.dimension === "cadence");
-    expect(cad?.value?.absolute?.value).toBe(28);
+    const cad = wu?.performance?.intensity?.find((x) => x.dimension === "cadence");
+    expect(abs(cad?.value)?.value).toBe(28);
     expect(cad?.unit).toBe("/min");
-    const pow = wu?.performance?.intensity?.find((x: any) => x.dimension === "power");
-    expect(pow?.value?.absolute?.value).toBe(221);
-    expect(wu?.exerciseRef?.id).toBe("row.erg");
+    const pow = wu?.performance?.intensity?.find((x) => x.dimension === "power");
+    expect(abs(pow?.value)?.value).toBe(221);
+    expect(refObj(wu?.exerciseRef).id).toBe("row.erg");
     expect(twoK?.disciplines).toEqual(["rowing"]);
-    const hr = c2.find((r) => r.recordType === "Measurement" && r.id === `${twoK?.id}-hr`);
+    const hr = ofKind(c2, "Measurement").find((r) => r.id === `${twoK?.id}-hr`);
     expect(hr?.type).toBe("heart_rate_mean");
     expect(hr?.quantity).toBe(172);
     expect(hr?.unit).toBe("/min");
     expect(
-      twoK?.links?.some((l: any) => l.type === "measuredBy" && l.ref === hr?.id),
+      twoK?.links?.some((l) => l.type === "measuredBy" && l.ref === hr?.id),
       "Session missing measuredBy link to the HR measurement",
     ).toBe(true);
     // The Date column is offset-less wall-clock time — the mapped instant (and the HR
@@ -57,8 +60,8 @@ describe("mapConcept2", () => {
     const thirty = sess("30:00 SkiErg");
     const wu = thirty?.workUnits?.[0];
     expect(wu?.scoring).toBe("time");
-    expect(wu?.performance?.time?.absolute?.value).toBe(1800);
-    expect(wu?.exerciseRef?.id).toBe("ski.erg");
+    expect(abs(wu?.performance?.time)?.value).toBe(1800);
+    expect(refObj(wu?.exerciseRef).id).toBe("ski.erg");
     expect(thirty?.disciplines).toEqual(["concept2:skierg"]);
   });
 
@@ -67,8 +70,8 @@ describe("mapConcept2", () => {
     const jr = sess("2:37 row");
     const wu = jr?.workUnits?.[0];
     expect(wu?.scoring).toBe("continuous");
-    expect(wu?.performance?.time?.absolute?.value).toBe(157.4);
-    expect(wu?.performance?.distance?.absolute?.value).toBe(610);
+    expect(abs(wu?.performance?.time)?.value).toBe(157.4);
+    expect(abs(wu?.performance?.distance)?.value).toBe(610);
     expect(
       c2.some((r) => r.recordType === "Measurement" && r.id === `${jr?.id}-hr`),
       "HR measurement emitted with no Avg Heart Rate",
@@ -81,12 +84,12 @@ describe("mapConcept2", () => {
     expect(iv?.blocks).toHaveLength(1);
     const kids = iv?.blocks?.[0]?.children ?? [];
     expect(kids).toHaveLength(8);
-    for (const k of kids) {
-      expect(k.recordType).toBe("WorkUnit");
+    expect(ofKind(kids, "WorkUnit"), "every child is a WorkUnit").toHaveLength(8);
+    for (const k of ofKind(kids, "WorkUnit")) {
       expect(k.scoring).toBe("distance");
-      expect(k.performance?.distance?.absolute?.value).toBe(500);
-      expect(k.performance?.rest?.absolute?.value).toBe(30);
-      expect(k.exerciseRef?.id).toBe("row.erg");
+      expect(abs(k.performance?.distance)?.value).toBe(500);
+      expect(abs(k.performance?.rest)?.value).toBe(30);
+      expect(refObj(k.exerciseRef).id).toBe("row.erg");
     }
     expect(iv?.extension?.concept2?.avgStrokeRate, "whole-workout stroke rate should be residue").toBe(30);
   });
@@ -94,11 +97,11 @@ describe("mapConcept2", () => {
   // 4x5:00/1:00r ⇒ 4 time-scored 300 s children with 60 s rest.
   it("fixed time intervals (4x5:00/1:00r)", () => {
     const tv = sess("4x5:00/1:00r row");
-    const kids = tv?.blocks?.[0]?.children ?? [];
+    const kids = ofKind(tv?.blocks?.[0]?.children, "WorkUnit");
     expect(kids).toHaveLength(4);
     expect(kids[0]?.scoring).toBe("time");
-    expect(kids[0]?.performance?.time?.absolute?.value).toBe(300);
-    expect(kids[3]?.performance?.rest?.absolute?.value).toBe(60);
+    expect(abs(kids[0]?.performance?.time)?.value).toBe(300);
+    expect(abs(kids[3]?.performance?.rest)?.value).toBe(60);
   });
 
   // Variable intervals: the season CSV only discloses the first interval + count, so it
@@ -108,12 +111,12 @@ describe("mapConcept2", () => {
     expect(vv?.blocks, "must not fabricate a per-interval Block from the season CSV").toBeUndefined();
     const wu = vv?.workUnits?.[0];
     expect(wu?.scoring).toBe("continuous");
-    expect(wu?.performance?.distance?.absolute?.value).toBe(6000);
+    expect(abs(wu?.performance?.distance)?.value).toBe(6000);
     expect(vv?.extension?.concept2?.restTimeSeconds).toBe(540);
     expect(vv?.disciplines).toEqual(["cycling"]);
     // BikeErg has no canonical registry id — opaque-only.
-    expect(wu?.exerciseRef?.id).toBeUndefined();
-    expect(wu?.exerciseRef?.opaque).toBe("BikeErg");
+    expect(refObj(wu?.exerciseRef).id).toBeUndefined();
+    expect(refObj(wu?.exerciseRef).opaque).toBe("BikeErg");
   });
 
   // Every canonical exerciseRef id the mapper emits exists in the registry

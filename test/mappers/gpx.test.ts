@@ -4,7 +4,7 @@
 // Ported from scripts/test-tcx-gpx.ts.
 import { describe, expect, it } from "vitest";
 import { mapGpx } from "../../src/mappers/gpx.js";
-import { expectAllValid, expectRoundTripStable, readExample } from "../helpers.js";
+import { expectAllValid, expectRoundTripStable, ofKind, readExample } from "../helpers.js";
 
 describe("mapGpx", () => {
   describe("timed two-segment track with TrackPointExtension hr/cad", () => {
@@ -20,24 +20,25 @@ describe("mapGpx", () => {
     });
 
     it("concatenates trksegs into one honest offset series (the pause stays visible)", () => {
-      const route = gpx.find((r) => r.id === "gpx-route");
+      const route = ofKind(gpx, "Measurement").find((r) => r.id === "gpx-route");
       // 18:37:26 +0/5/8, then segment 2 at +98/+103
       expect(route?.sampleArray?.offsets).toEqual([0, 5, 8, 98, 103]);
-      expect(route?.sampleArray?.channels?.map((c: any) => c.name)).toEqual(["lat", "lon", "alt"]);
+      expect(route?.sampleArray?.channels?.map((c) => c.name)).toEqual(["lat", "lon", "alt"]);
       expect(route?.unit, "multi-channel route must not carry a top-level unit").toBeUndefined();
       expect(route?.sampleArray?.dataPoints?.[3]).toEqual([47.6448, -122.3265, 7.1]);
-      expect(route?.sampleArray?.dataPoints?.[4]?.[2], "point without <ele> must have null alt").toBeNull();
+      const p4 = route?.sampleArray?.dataPoints?.[4];
+      expect(Array.isArray(p4) ? p4[2] : p4, "point without <ele> must have null alt").toBeNull();
       expect(route?.startTime).toBe("2009-10-17T18:37:26Z");
       expect(route?.endTime).toBe("2009-10-17T18:39:09Z");
     });
 
     it("extracts TrackPointExtension streams sharing the location offsets", () => {
-      const hr = gpx.find((r) => r.id === "gpx-hr");
+      const hr = ofKind(gpx, "Measurement").find((r) => r.id === "gpx-hr");
       expect(hr?.sampleArray?.dataPoints).toEqual([128, 132, 135, 121, 124]);
       expect(hr?.type).toBe("heart_rate");
       expect(hr?.unit).toBe("/min");
       expect(hr?.sampleArray?.offsets, "hr must share the location offsets").toEqual([0, 5, 8, 98, 103]);
-      const cad = gpx.find((r) => r.id === "gpx-cadence");
+      const cad = ofKind(gpx, "Measurement").find((r) => r.id === "gpx-cadence");
       expect(cad?.sampleArray?.dataPoints).toEqual([84, 86, 87, 82, null]);
     });
 
@@ -45,7 +46,7 @@ describe("mapGpx", () => {
       const session = gpx.find((r) => r.recordType === "Session");
       expect(session?.disciplines).toEqual(["running"]);
       expect(session?.name).toBe("Example GPX Document");
-      const refs = (session?.links ?? []).filter((l: any) => l.type === "measuredBy").map((l: any) => l.ref);
+      const refs = (session?.links ?? []).filter((l) => l.type === "measuredBy").map((l) => l.ref);
       expect(refs).toEqual(["gpx-route", "gpx-hr", "gpx-cadence"]);
       const wu = session?.workUnits?.[0];
       expect(wu?.scoring).toBe("continuous");
@@ -61,12 +62,12 @@ describe("mapGpx", () => {
       expectAllValid(untimed);
       expectRoundTripStable(untimed);
       expect(untimed).toHaveLength(1);
-      const s = untimed[0];
+      const s = ofKind(untimed, "Session")[0];
       expect(s?.recordType).toBe("Session");
       expect(s?.startTime, "untimed session must not fabricate start/end times").toBeUndefined();
       expect(s?.endTime).toBeUndefined();
       expect(s?.disciplines).toEqual(["hiking"]);
-      const track = s?.extension?.gpx?.untimedTrack;
+      const track = s?.extension?.gpx?.untimedTrack as { points?: (number | null)[][] } | undefined;
       expect(track?.points).toHaveLength(3);
       expect(track?.points?.[0]).toEqual([46.5784, 8.00654, 1932]);
     });

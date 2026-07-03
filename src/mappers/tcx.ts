@@ -43,7 +43,15 @@
 //   workout shape; use mapFit for a decoded workout). A file containing only those
 //   maps to [] gracefully. Trackpoint ns3:Speed is not mapped (derivable from the
 //   location series); per-point DistanceMeters likewise.
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type Link,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Provenance,
+  type WorkUnit,
+} from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { elRe, els, first, numText, text } from "./xml.js";
 
@@ -66,9 +74,9 @@ interface Tp {
 }
 
 /** Map a TCX (TrainingCenterDatabase v2) document string to OpenBody wire records (see file header for shape decisions). */
-export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapTcx(xml: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
   let n = 0;
 
   for (const act of els(xml, "Activity")) {
@@ -81,7 +89,7 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       const c = first(act.inner, "Creator");
       return c ? text(c.inner, "Name") : undefined;
     })();
-    const prov = (method: string): OpenBodyRecord => ({
+    const prov = (method: Provenance["method"]): Provenance => ({
       method,
       sourceApp: "tcx",
       ...(creatorName ? { device: { model: creatorName } } : {}),
@@ -113,7 +121,7 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
     // Truthiness match with the original `t.time` filter ("" is untimed), and the type
     // predicate lets everything downstream read `time` without non-null assertions.
     const timed = tps.filter((t): t is Tp & { time: string } => !!t.time);
-    const measuredBy: OpenBodyRecord[] = [];
+    const measuredBy: Link[] = [];
     let mStart: string | undefined, mEnd: string | undefined;
     const firstTimed = timed[0];
     if (firstTimed !== undefined) {
@@ -166,14 +174,14 @@ export function mapTcx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
       const li = i + 1;
       const lapStart = lap.attrs.StartTime;
       const t = numText(lap.meta, "TotalTimeSeconds");
-      const perf: OpenBodyRecord = {};
+      const perf: Performance = {};
       if (t != null) perf.time = { absolute: { value: t, unit: "s" } };
       const d = numText(lap.meta, "DistanceMeters");
       if (d != null) perf.distance = { absolute: { value: d, unit: "m" } };
       const cal = numText(lap.meta, "Calories");
       if (cal != null) perf.energy = { absolute: { value: cal, unit: "kcal" } };
 
-      const wu: OpenBodyRecord = {
+      const wu: WorkUnit = {
         id: `${base}-lap-${li}`,
         recordType: "WorkUnit",
         scoring: "continuous",

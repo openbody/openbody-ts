@@ -21,9 +21,12 @@ import schema from "../vendor/openbody.schema.json" with { type: "json" };
 import { isFixedPointLike } from "./canonical.js";
 // Inline container fields by recordType (§5.1) — shared with normalize.ts, see src/records.ts.
 import { CONTAINERS } from "./records.js";
+import type { WireRecord } from "./types.js";
 
 // ajv / ajv-formats are CJS; casts fix NodeNext default-import types (runtime is fine).
+// biome-ignore lint/suspicious/noExplicitAny: documented ajv interop — the CJS default import's compile() return has no usable NodeNext type.
 const Ajv2020 = Ajv2020Mod as unknown as { new (opts?: Record<string, unknown>): any };
+// biome-ignore lint/suspicious/noExplicitAny: documented ajv interop (same CJS default-import mismatch).
 const addFormats = addFormatsMod as unknown as (ajv: any) => void;
 
 // Compiles a JSON Schema document into a `validate` function (ajv compile + the
@@ -37,8 +40,8 @@ export function createValidator(schemaDoc: unknown) {
 
   return function validate(record: unknown): { valid: boolean; errors: string | null } {
     const ok = _validate(record);
-    const phaseErrors = ok ? validateProgramPhases(record as Record<string, any>) : [];
-    const semanticErrors = ok ? validateSemantics(record as Record<string, any>) : [];
+    const phaseErrors = ok ? validateProgramPhases(record as WireRecord) : [];
+    const semanticErrors = ok ? validateSemantics(record as WireRecord) : [];
     const valid = !!ok && phaseErrors.length === 0 && semanticErrors.length === 0;
     if (valid) return { valid: true, errors: null };
     const parts: string[] = [];
@@ -57,12 +60,12 @@ export function createValidator(schemaDoc: unknown) {
 // whole-document context is needed. Phase-internal order-consistency with
 // top-level `sessions` (contiguous, order-preserving subsequence) is NOT
 // checked here — see the schema's top-of-file disclaimer for that gap.
-function validateProgramPhases(record: Record<string, any>): string[] {
+function validateProgramPhases(record: WireRecord): string[] {
   if (record?.recordType !== "Program" || !Array.isArray(record.phases)) return [];
   const topSessions: unknown[] | undefined = Array.isArray(record.sessions) ? record.sessions : undefined;
   const errors: string[] = [];
   const seen = new Set<unknown>();
-  record.phases.forEach((phase: any, i: number) => {
+  record.phases.forEach((phase: WireRecord, i: number) => {
     if (!phase || !Array.isArray(phase.sessions)) return;
     for (const id of phase.sessions) {
       if (topSessions && !topSessions.includes(id)) {
@@ -78,7 +81,7 @@ function validateProgramPhases(record: Record<string, any>): string[] {
 }
 
 // Visit `rec` and every record inlined beneath it (§5.1 containment).
-function forEachRecord(rec: any, visit: (r: Record<string, any>) => void): void {
+function forEachRecord(rec: WireRecord, visit: (r: WireRecord) => void): void {
   if (!rec || typeof rec !== "object") return;
   visit(rec);
   for (const field of CONTAINERS[rec.recordType] || []) {
@@ -94,7 +97,7 @@ function forEachRecord(rec: any, visit: (r: Record<string, any>) => void): void 
 // objects as "scalar" here while normalize.ts did not, a semantics drift. A 3-key
 // object is schema-invalid anyway (fixedPoint sets additionalProperties: false),
 // so these semantic checks — which only run after ajv passes — see no such value.
-function targetVariant(v: any): string | undefined {
+function targetVariant(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v === "number" || isFixedPointLike(v)) return "scalar";
   if (typeof v === "object") {
@@ -113,7 +116,7 @@ function targetVariant(v: any): string | undefined {
 // satisfies "required" for those two variants. A bare scalar has no such inner
 // slot, so `Load.unit` itself is the only place it can live.
 // SPEC.md is silent on `ramp` here, so it is left unconstrained rather than guessed.
-function checkLoadUnit(load: any, where: string): string[] {
+function checkLoadUnit(load: WireRecord, where: string): string[] {
   if (!load || typeof load !== "object") return [];
   const variant = targetVariant(load.value);
   if (variant === "scalar") {
@@ -148,7 +151,7 @@ const SCORING_ALLOWED_METRICS: Record<string, string[]> = {
 };
 const PRIMARY_METRIC_FIELDS = ["reps", "time", "distance", "energy"];
 
-function checkScoringMetric(wu: Record<string, any>): string[] {
+function checkScoringMetric(wu: WireRecord): string[] {
   const allowed = SCORING_ALLOWED_METRICS[wu.scoring];
   if (!allowed) return [];
   const errors: string[] = [];
@@ -167,7 +170,7 @@ function checkScoringMetric(wu: Record<string, any>): string[] {
 // §5.5 "Sets shorthand": `sets` is a *planned prescription* shorthand that expands
 // to N WorkUnits; the performed form MUST enumerate one WorkUnit per set, so a
 // WorkUnit that carries `prescription.sets` MUST NOT also carry `performance`.
-function checkSetsPerformance(wu: Record<string, any>): string[] {
+function checkSetsPerformance(wu: WireRecord): string[] {
   if (wu.prescription?.sets !== undefined && wu.performance !== undefined) {
     return [`WorkUnit ${wu.id ?? "?"} carries prescription.sets and performance — mutually exclusive (§5.5)`];
   }
@@ -180,7 +183,7 @@ function checkSetsPerformance(wu: Record<string, any>): string[] {
 // tombstone contains strictly the id, recordType, and status: deleted fields").
 const TOMBSTONE_ALLOWED_FIELDS = new Set(["id", "recordType", "status"]);
 
-function checkTombstone(rec: Record<string, any>): string[] {
+function checkTombstone(rec: WireRecord): string[] {
   if (rec.status !== "deleted") return [];
   const extra = Object.keys(rec).filter((k) => !TOMBSTONE_ALLOWED_FIELDS.has(k));
   if (extra.length) {
@@ -193,7 +196,7 @@ function checkTombstone(rec: Record<string, any>): string[] {
 // Exercise.workUnits are always direct children (Exercise's only container, per
 // CONTAINERS), so "enclosing" here is just "this Exercise's own workUnits array" —
 // no recursive context-tracking needed.
-function checkExerciseRefEnclosing(rec: Record<string, any>): string[] {
+function checkExerciseRefEnclosing(rec: WireRecord): string[] {
   if (rec.recordType !== "Exercise" || !Array.isArray(rec.workUnits)) return [];
   const errors: string[] = [];
   for (const wu of rec.workUnits) {
@@ -209,10 +212,10 @@ function checkExerciseRefEnclosing(rec: Record<string, any>): string[] {
 // §5.11 ThresholdProfileEntry.estimationFormula/estimatedFrom (OB-32) MUST NOT
 // be present when `source` is "tested" — they document how an *estimate* was
 // derived, so they're meaningless (and misleading) attached to a tested value.
-function checkThresholdEstimationProvenance(rec: Record<string, any>): string[] {
+function checkThresholdEstimationProvenance(rec: WireRecord): string[] {
   if (rec.recordType !== "ThresholdProfile" || !Array.isArray(rec.entries)) return [];
   const errors: string[] = [];
-  rec.entries.forEach((entry: any, i: number) => {
+  rec.entries.forEach((entry: WireRecord, i: number) => {
     if (!entry || typeof entry !== "object" || entry.source !== "tested") return;
     if (entry.estimationFormula !== undefined) {
       errors.push(
@@ -234,7 +237,7 @@ function checkThresholdEstimationProvenance(rec: Record<string, any>): string[] 
 // exerciseRef/enclosing-Exercise mutual exclusion, and estimation-provenance
 // gating on ThresholdProfileEntry.source. Walks the whole inlined-record tree
 // under `record` (§5.1), not just the top-level record.
-function validateSemantics(record: Record<string, any>): string[] {
+function validateSemantics(record: WireRecord): string[] {
   const errors: string[] = [];
   forEachRecord(record, (rec) => {
     errors.push(...checkTombstone(rec));

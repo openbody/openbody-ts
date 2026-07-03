@@ -6,10 +6,10 @@ import { describe, expect, it } from "vitest";
 import { parseCsv } from "../../src/mappers/csv.js";
 import { mapHevy, mapOpenBodyToStrong, mapStrong } from "../../src/mappers/index.js";
 import { equivalent } from "../../src/normalize.js";
-import type { OpenBodyRecord } from "../../src/types.js";
-import { expectAllValid, readExample } from "../helpers.js";
+import type { Exercise, OpenBodyRecord, Session, WorkUnit } from "../../src/types.js";
+import { expectAllValid, ofKind, readExample } from "../helpers.js";
 
-const session = (over: Record<string, any>): OpenBodyRecord => ({
+const session = (over: Partial<Session>): Session => ({
   id: "s1",
   recordType: "Session",
   subject: "subj-001",
@@ -19,7 +19,7 @@ const session = (over: Record<string, any>): OpenBodyRecord => ({
   name: "Test",
   ...over,
 });
-const exercise = (workUnits: OpenBodyRecord[], id = "e1"): OpenBodyRecord => ({
+const exercise = (workUnits: WorkUnit[], id = "e1"): Exercise => ({
   id,
   recordType: "Exercise",
   exerciseRef: { opaque: "Some Movement" },
@@ -41,7 +41,7 @@ describe("mapOpenBodyToStrong", () => {
     const roundTripped = mapStrong(out.csv);
     expectAllValid(roundTripped);
     expect(
-      equivalent(original as any, roundTripped as any),
+      equivalent(original, roundTripped),
       "outbound round-trip (Strong → OpenBody → Strong → OpenBody) not equivalent",
     ).toBe(true);
     // The duration-scored Plank row must survive: Seconds column carries the hold time.
@@ -87,7 +87,7 @@ describe("mapOpenBodyToStrong", () => {
       expect(dist.rows[0]?.Distance, "no float dust").toBe("5300");
       expect(dist.omissions).toEqual([]);
       // round-trips through mapStrong as { value: 5300, unit: "m" }
-      const distBack = mapStrong(dist.csv)[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.distance;
+      const distBack = ofKind(mapStrong(dist.csv), "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.distance;
       expect(distBack).toEqual({ absolute: { value: 5300, unit: "m" } });
     });
 
@@ -101,7 +101,7 @@ describe("mapOpenBodyToStrong", () => {
       expect(bw.rows[0]?.Weight).toBe("0");
       expect(bw.omissions).toEqual([]);
       expect(
-        mapStrong(bw.csv)[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.load,
+        ofKind(mapStrong(bw.csv), "Session")[0]?.exercises?.[0]?.workUnits?.[0]?.performance?.load,
         "re-import grew a load",
       ).toBeUndefined();
     });
@@ -252,7 +252,7 @@ describe("mapOpenBodyToStrong", () => {
       expect(out.csv.trim().split("\n")).toHaveLength(1); // just the header
     });
     it("non-Session records are skipped with an omission", () => {
-      const out = mapOpenBodyToStrong([{ id: "m1", recordType: "Measurement" }]);
+      const out = mapOpenBodyToStrong([{ id: "m1", recordType: "Measurement" } as OpenBodyRecord]);
       expect(out.omissions).toHaveLength(1);
       expect(out.omissions[0]?.recordId).toBe("m1");
     });

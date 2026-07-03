@@ -1,11 +1,19 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type Link,
+  type LiveRecord,
+  type MapOptions,
+  type Provenance,
+  type WireRecord,
+} from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream } from "./shared.js";
 
+/** The documented Strava API activity+streams wire shape (input side — WireRecord-loose, not OpenBody records). */
 export interface StravaInput {
-  activity: Record<string, any>;
-  streams: Record<string, any>;
+  activity: WireRecord;
+  streams: WireRecord;
 }
 
 // sport_type (CamelCase API enum) → registry discipline token (vocab/disciplines.json);
@@ -35,7 +43,7 @@ const mapDiscipline = makeDisciplineMapper(DISC, "strava");
 const disciplineFor = (t: string): string => mapDiscipline(t, t.toLowerCase());
 
 /** Map a Strava activity + streams object to OpenBody wire records. */
-export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapStrava(input: StravaInput, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const a = input.activity,
     s = input.streams;
@@ -49,10 +57,14 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): OpenBodyRe
   // device_name is a free-form display string; Strava does not state the manufacturer
   // separately, so none is fabricated (model-only, same as tcx.ts's <Creator>).
   const device = a.device_name ? { model: a.device_name } : undefined;
-  const prov = (method: string) => ({ method, sourceApp: "strava", ...(device ? { device } : {}) });
+  const prov = (method: Provenance["method"]): Provenance => ({
+    method,
+    sourceApp: "strava",
+    ...(device ? { device } : {}),
+  });
 
-  const records: OpenBodyRecord[] = [];
-  const measuredBy: { type: string; ref: string }[] = [];
+  const records: LiveRecord[] = [];
+  const measuredBy: Link[] = [];
 
   const scalarStream = makeScalarStream({
     records,

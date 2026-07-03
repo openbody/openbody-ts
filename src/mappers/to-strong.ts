@@ -44,7 +44,7 @@
 import { canonNumber, isFixedPointLike } from "../canonical.js";
 import { LosslessNumber } from "../parse.js";
 import { sourceNameForId } from "../resolve.js";
-import type { MapOptions, OpenBodyRecord } from "../types.js";
+import type { Block, Exercise, FixedPointObject, MapOptions, OpenBodyRecord, Session, WorkUnit } from "../types.js";
 
 const HEADER = [
   "Date",
@@ -121,7 +121,9 @@ function fixedPointToPlain(coefficient: string, exponent: string): string {
 function decTimes(v: unknown, factor: string): string | undefined {
   let a: { coefficient: string; exponent: string };
   try {
-    a = canonNumber(v as any);
+    // Wire numbers here may also be LosslessNumbers (callers that parsed with parseLossless);
+    // anything else makes canonNumber throw, caught below.
+    a = canonNumber(v as number | LosslessNumber | FixedPointObject);
   } catch {
     return undefined;
   }
@@ -156,14 +158,20 @@ const TIME_TO_S: Record<string, string> = { s: "1", min: "60", h: "3600", ms: "0
 
 /** Pull the scalar out of a metric value (bare scalar or `absolute` Target); every other
  * Target variant gets a `why` explaining what Strong's numeric columns can't take. */
-function scalarPart(v: any): { raw?: unknown; unit?: string; why?: string } {
+function scalarPart(v: unknown): { raw?: unknown; unit?: string; why?: string } {
   if (v === null || v === undefined) return {};
   if (typeof v === "number" || v instanceof LosslessNumber || isFixedPointLike(v)) return { raw: v };
   if (typeof v === "object" && !Array.isArray(v)) {
-    if ("absolute" in v) return { raw: v.absolute?.value, unit: v.absolute?.unit };
+    // Variant payloads read loosely: `v` may be a LosslessNumber-bearing tree, not just the
+    // strict wire Target — only the fields actually consumed are named.
+    const t = v as {
+      absolute?: { value?: unknown; unit?: string };
+      relativeToThreshold?: { percent?: unknown; of?: unknown };
+    };
+    if ("absolute" in v) return { raw: t.absolute?.value, unit: t.absolute?.unit };
     if ("range" in v) return { why: "a min–max range" };
     if ("relativeToThreshold" in v) {
-      const r = v.relativeToThreshold ?? {};
+      const r = t.relativeToThreshold ?? {};
       const what =
         r.percent !== undefined
           ? `${r.percent}% of ${r.of ?? "a threshold"}`
@@ -178,7 +186,7 @@ function scalarPart(v: any): { raw?: unknown; unit?: string; why?: string } {
 
 /** Convert a metric value to a plain decimal string in `targetUnit` using `factors`. */
 function metricColumn(
-  v: any,
+  v: unknown,
   factors: Record<string, string>,
   defaultUnit: string,
   targetUnit: string,
@@ -220,15 +228,15 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
   const rows: string[][] = [];
   let wIdx = 0;
 
-  for (const session of records) {
-    if (session.recordType !== "Session") {
-      omit(
-        session.id,
-        undefined,
-        `recordType "${session.recordType}" has no Strong CSV representation — record skipped`,
-      );
+  for (const record of records) {
+    if (record.recordType !== "Session") {
+      omit(record.id, undefined, `recordType "${record.recordType}" has no Strong CSV representation — record skipped`);
       continue;
     }
+    // recordType narrowing leaves `Session | Tombstone` (a tombstone names the kind it
+    // deletes, §7.5). A tombstone carries no payload and every field read below is optional,
+    // so reading it as a payload-less Session preserves the old behavior exactly.
+    const session = record as Session;
     wIdx++;
 
     const date = toStrongDate(session.startTime);
@@ -243,8 +251,8 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
     // exercise; Session.blocks flattens (§5.3 at-most-one container): Strong's flat CSV has
     // no superset/round concept, so Block children become consecutive plain sets and the
     // lost structure is reported.
-    const exercises: OpenBodyRecord[] = [];
-    const walk = (node: OpenBodyRecord) => {
+    const exercises: Exercise[] = [];
+    const walk = (node: Block | Exercise | WorkUnit) => {
       if (node?.recordType === "Exercise") exercises.push(node);
       else if (node?.recordType === "WorkUnit") {
         // A bare WorkUnit (Session.workUnits or a Block child) can stand alone only if it
@@ -290,7 +298,7 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
         typeof er === "string"
           ? (sourceNameForId(er, "strong") ?? er)
           : (er?.opaque ?? (er?.id ? (sourceNameForId(er.id, "strong") ?? er.id) : ""));
-      const workUnits: OpenBodyRecord[] = ex.workUnits ?? [];
+      const workUnits: WorkUnit[] = ex.workUnits ?? [];
 
       let setOrder = 0;
       for (const wu of workUnits) {

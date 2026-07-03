@@ -6,7 +6,13 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 import { normalizeDocument } from "../src/normalize.js";
 import { validate } from "../src/schema-loader-node.js";
-import type { OpenBodyRecord } from "../src/types.js";
+import type {
+  ExerciseRef,
+  ExerciseRefObject,
+  OpenBodyRecord,
+  ScalarOrTargetWithRamp,
+  WireNumber,
+} from "../src/types.js";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const examplesDir = path.join(repoRoot, "examples");
@@ -26,10 +32,33 @@ export function expectAllValid(records: OpenBodyRecord[]): void {
 
 /** §8.3 round-trip: normalize, re-parse the canonical bytes, normalize again — must match. */
 export function expectRoundTripStable(records: OpenBodyRecord[]): string[] {
-  const n1 = normalizeDocument(records as any);
+  const n1 = normalizeDocument(records);
   const n2 = normalizeDocument(n1.map((s) => JSON.parse(s)));
   expect(n2, "normalization not idempotent (round-trip)").toEqual(n1);
   return n1;
+}
+
+/**
+ * All records of one kind, narrowed — works on any recordType-discriminated array
+ * (mapper output, `Session.workUnits`, `Block.children`, …); undefined ⇒ [] so it
+ * chains off optional containers. E.g. `ofKind(records, "Session")` → `Session[]`.
+ */
+export function ofKind<T extends { recordType: string }, K extends T["recordType"]>(
+  records: readonly T[] | undefined,
+  kind: K,
+): Extract<T, { recordType: K }>[] {
+  return (records ?? []).filter((r): r is Extract<T, { recordType: K }> => r.recordType === kind);
+}
+
+/** The `absolute` payload of a §5.10 metric value, or undefined (assertion-side union narrowing). */
+export function abs(v: ScalarOrTargetWithRamp | undefined): { value: WireNumber; unit?: string } | undefined {
+  return v !== null && typeof v === "object" && "absolute" in v ? v.absolute : undefined;
+}
+
+/** An ExerciseRef's object form (§6: a bare string is shorthand for `{ id }`), so `.id`/`.opaque` reads chain. */
+export function refObj(er: ExerciseRef | undefined): ExerciseRefObject {
+  if (typeof er === "string") return { id: er };
+  return er ?? {};
 }
 
 /** The standard bar every mapper output must clear (schema + round-trip). */
@@ -54,14 +83,15 @@ if (!haveRegistry) {
 /** Collect every exerciseRef id in a mapped document (string or object form). */
 export function collectExerciseRefIds(records: OpenBodyRecord[]): Set<string> {
   const ids = new Set<string>();
-  const walk = (o: any): void => {
+  const walk = (o: unknown): void => {
     if (Array.isArray(o)) {
       o.forEach(walk);
       return;
     }
     if (o && typeof o === "object") {
-      if (o.exerciseRef) {
-        const id = typeof o.exerciseRef === "string" ? o.exerciseRef : o.exerciseRef.id;
+      const { exerciseRef } = o as { exerciseRef?: ExerciseRef };
+      if (exerciseRef) {
+        const id = typeof exerciseRef === "string" ? exerciseRef : exerciseRef.id;
         if (id) ids.add(id);
       }
       Object.values(o).forEach(walk);

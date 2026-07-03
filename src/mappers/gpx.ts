@@ -36,7 +36,7 @@
 // - The <gpx creator="…"> attribute is free-form vendor text, not a registry token,
 //   so it is preserved in extension.gpx.creator rather than forced into
 //   provenance.sourceApp (which carries the format token "gpx").
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import { DEFAULT_SUBJECT, type Link, type LiveRecord, type MapOptions, type Provenance } from "../types.js";
 import { makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 import { els, first, numText, text } from "./xml.js";
 
@@ -73,7 +73,7 @@ interface Pt {
 }
 
 /** Map a GPX 1.1 (or 1.0) document string to OpenBody wire records (see file header for shape decisions). */
-export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapGpx(xml: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
 
   const pts: Pt[] = [];
@@ -100,7 +100,7 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const creator = first(xml, "gpx")?.attrs.creator;
   const gpxExt: Record<string, unknown> = {};
   if (creator) gpxExt.creator = creator;
-  const prov = { method: "sensor", sourceApp: "gpx" };
+  const prov: Provenance = { method: "sensor", sourceApp: "gpx" };
   const discipline = disciplineFor(trkType);
 
   // Truthiness match with the original `p.time` filter ("" is untimed), and the type
@@ -130,8 +130,8 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
   const t0 = Date.parse(start);
   const offsets = timed.map((p) => (Date.parse(p.time) - t0) / 1000);
 
-  const records: OpenBodyRecord[] = [];
-  const measuredBy: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
+  const measuredBy: Link[] = [];
   records.push({
     id: "gpx-route",
     recordType: "Measurement",
@@ -185,7 +185,8 @@ export function mapGpx(xml: string, opts: MapOptions = {}): OpenBodyRecord[] {
         id: "gpx-session-wu",
         recordType: "WorkUnit",
         scoring: "continuous",
-        performance: { time: { absolute: { value: offsets[offsets.length - 1], unit: "s" } } },
+        // `timed` is non-empty here (firstTimed guard above), so the last offset exists.
+        performance: { time: { absolute: { value: offsets[offsets.length - 1] as number, unit: "s" } } },
       },
     ],
     ...(Object.keys(gpxExt).length ? { extension: { gpx: gpxExt } } : {}),

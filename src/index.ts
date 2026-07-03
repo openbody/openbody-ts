@@ -28,13 +28,71 @@ export {
   mapTcx,
   mapTheCrag,
 } from "./mappers/index.js";
+export type { NormalizeInput } from "./normalize.js";
 export { equivalent, normalizeDocument } from "./normalize.js";
 export { LosslessNumber, parseLossless } from "./parse.js";
 export type { ResolvedExerciseRef, ResolveOptions } from "./resolve.js";
 // §6.5 producer-side matching ladder: raw app exercise names → canonical registry ids
 // (browser-safe: backed by the vendored registry snapshot, see src/resolve.ts).
 export { resolveExerciseRef, sourceNameForId } from "./resolve.js";
-export type { MapOptions, OpenBodyRecord } from "./types.js";
+// The wire format as types (WP6): one interface per schema $def, `OpenBodyRecord` the
+// recordType-discriminated union, `WireRecord` the permissive escape hatch.
+export type {
+  AbsoluteTarget,
+  Block,
+  BlockPerformance,
+  BlockScoring,
+  CoreLinkType,
+  Descriptors,
+  EffortLoad,
+  Envelope,
+  Exercise,
+  ExerciseRef,
+  ExerciseRefObject,
+  Extension,
+  FixedPointObject,
+  Intensity,
+  Link,
+  LiveRecord,
+  Load,
+  MapOptions,
+  Measurement,
+  MediaItem,
+  Modifier,
+  ModularFields,
+  OpenBodyRecord,
+  Outcome,
+  Participant,
+  Performance,
+  PhasePatternPhase,
+  Prescription,
+  Program,
+  ProgramPhase,
+  Progression,
+  Provenance,
+  RampTarget,
+  RangeTarget,
+  RelativeToThresholdTarget,
+  Rep,
+  SampleArray,
+  SampleDataPoint,
+  ScalarOrTarget,
+  ScalarOrTargetWithRamp,
+  Session,
+  Sides,
+  StatusPeriod,
+  StopConditionTarget,
+  Target,
+  TargetWithRamp,
+  ThresholdProfile,
+  ThresholdProfileEntry,
+  Timestamp,
+  Tombstone,
+  WireNumber,
+  WireRecord,
+  WorkUnit,
+} from "./types.js";
+export { DEFAULT_SUBJECT } from "./types.js";
 /**
  * `createValidator(schemaDoc)` compiles an arbitrary OpenBody JSON Schema document into a
  * `validate` function (ajv + the semantic checks the schema can't express) — useful for

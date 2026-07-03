@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { mapFitbitTakeout } from "../../src/mappers/fitbit.js";
-import { examplesDir, expectValidAndStable } from "../helpers.js";
+import { abs, examplesDir, expectValidAndStable, ofKind } from "../helpers.js";
 
 const dir = path.join(examplesDir, "fitbit");
 const files = fs
@@ -17,6 +17,7 @@ const files = fs
   .map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), "utf8") }));
 
 const records = mapFitbitTakeout(files, { utcOffset: "-08:00" });
+const measurements = ofKind(records, "Measurement");
 
 describe("mapFitbitTakeout", () => {
   // 1. Every wire record validates; normalization is idempotent (§8.3 round-trip).
@@ -27,9 +28,9 @@ describe("mapFitbitTakeout", () => {
   // 2. Sleep: category Measurements over ADJACENT intervals (§4.3), with the 2-min
   // shortData wake spliced into the deep segment (5 data segments → 7).
   it("emits adjacent sleep stages with the short wake spliced in, plus summary quantities", () => {
-    const stages = records
+    const stages = measurements
       .filter((r) => r.type === "sleep_stage")
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
     expect(stages, "expected 7 stage intervals (5 data + deep split by 1 short wake)").toHaveLength(7);
     for (let i = 0; i < stages.length - 1; i++) {
       expect(stages[i]?.endTime, `gap/overlap between ${stages[i]?.id} and ${stages[i + 1]?.id}`).toBe(
@@ -49,7 +50,7 @@ describe("mapFitbitTakeout", () => {
       ["sleep_rem", 30],
       ["sleep_awake", 8],
     ] as const) {
-      const r = records.find((x) => x.type === type);
+      const r = measurements.find((x) => x.type === type);
       expect(r, `missing ${type}`).toBeDefined();
       expect(r?.quantity, type).toBe(mins);
       expect(r?.unit).toBe("min");
@@ -61,7 +62,7 @@ describe("mapFitbitTakeout", () => {
   // 3. Weight: exact §4.2 fixed-point in [lb_av] (175.5 → 1755e-1; integer 175 → 175e0),
   // Aria scale → sensor+device, API entry → manual; bmi + fat ride along.
   it("keeps weight as exact fixed-point in [lb_av] with honest provenance", () => {
-    const w = records.filter((r) => r.type === "body_mass");
+    const w = measurements.filter((r) => r.type === "body_mass");
     expect(w, "expected 2 body_mass records").toHaveLength(2);
     const aria = w.find((r) => r.id === "fitbit-weight-1704526260000");
     expect(aria?.quantity).toEqual({ coefficient: 1755, exponent: -1 });
@@ -72,33 +73,33 @@ describe("mapFitbitTakeout", () => {
     const manual = w.find((r) => r.id === "fitbit-weight-1704612600000");
     expect(manual?.quantity).toEqual({ coefficient: 175, exponent: 0 });
     expect(manual?.provenance?.method).toBe("manual");
-    const fat = records.find((r) => r.type === "body_fat_percentage");
+    const fat = measurements.find((r) => r.type === "body_fat_percentage");
     expect(fat?.quantity).toEqual({ coefficient: 215, exponent: -1 });
-    expect(records.filter((r) => r.type === "bmi")).toHaveLength(2);
+    expect(measurements.filter((r) => r.type === "bmi")).toHaveLength(2);
   });
 
   // 4. Sessions: activityName → canonical discipline; unknown name → fitbit:<name>
   // fallback; summary aggregates hang off the WorkUnit via measuredBy.
   it("maps exercise logs to Sessions with disciplines + measuredBy aggregates", () => {
-    const run = records.find((r) => r.id === "fitbit-ex-21092332392");
+    const run = ofKind(records, "Session").find((r) => r.id === "fitbit-ex-21092332392");
     expect(run, "missing Run session").toBeDefined();
     expect(run?.disciplines).toEqual(["running"]);
     expect(run?.clientRecordId).toBe("21092332392");
     expect(run?.startTime).toBe("2024-01-06T07:08:57-08:00");
     expect(run?.endTime).toBe("2024-01-06T07:39:40-08:00");
     const perf = run?.workUnits?.[0]?.performance;
-    expect(perf?.time?.absolute?.value).toBe(1843);
-    expect(perf?.distance?.absolute?.value).toBe(5.28);
-    expect(perf?.distance?.absolute?.unit).toBe("km");
-    expect(perf?.energy?.absolute?.value).toBe(306);
-    const refs = (run?.workUnits?.[0]?.links ?? []).filter((l: any) => l.type === "measuredBy").map((l: any) => l.ref);
+    expect(abs(perf?.time)?.value).toBe(1843);
+    expect(abs(perf?.distance)?.value).toBe(5.28);
+    expect(abs(perf?.distance)?.unit).toBe("km");
+    expect(abs(perf?.energy)?.value).toBe(306);
+    const refs = (run?.workUnits?.[0]?.links ?? []).filter((l) => l.type === "measuredBy").map((l) => l.ref);
     for (const ref of ["fitbit-ex-21092332392-hr-mean", "fitbit-ex-21092332392-steps"]) {
       expect(refs, `missing measuredBy aggregate ${ref}`).toContain(ref);
       expect(records.find((r) => r.id === ref)).toBeDefined();
     }
     expect(run?.extension?.fitbit?.heartRateZones, "heartRateZones not preserved in extension").toBeDefined();
 
-    const ell = records.find((r) => r.id === "fitbit-ex-21092332999");
+    const ell = ofKind(records, "Session").find((r) => r.id === "fitbit-ex-21092332999");
     expect(ell?.disciplines).toEqual(["fitbit:elliptical"]);
     expect(ell?.provenance?.method).toBe("manual");
     expect(ell?.workUnits?.[0]?.links, "Elliptical (no aggregates) should have no links").toBeUndefined();
@@ -106,7 +107,7 @@ describe("mapFitbitTakeout", () => {
 
   // 5. Intraday volume: one sampleArray per day per stream, offsets from timestamps.
   it("collapses intraday steps/HR to one sampleArray per day (HR in UTC, steps local) + daily RHR", () => {
-    const hr = records.filter((r) => r.type === "heart_rate" && r.sampleArray);
+    const hr = measurements.filter((r) => r.type === "heart_rate" && r.sampleArray);
     expect(hr, "expected 1 HR day-series").toHaveLength(1);
     const hrSa = hr[0]?.sampleArray;
     expect(hrSa?.offsets).toHaveLength(10);
@@ -115,20 +116,20 @@ describe("mapFitbitTakeout", () => {
     expect(hrSa?.offsets?.[9]).toBe(105);
     expect(hr[0]?.unit).toBe("/min");
     expect(hrSa?.dataPoints?.[0]).toBe(76);
-    expect(hr[0]?.startTime.endsWith("Z"), `HR timestamps are documented UTC; startTime=${hr[0]?.startTime}`).toBe(
+    expect(hr[0]?.startTime?.endsWith("Z"), `HR timestamps are documented UTC; startTime=${hr[0]?.startTime}`).toBe(
       true,
     );
     expect(hr[0]?.endTime).toBe("2024-01-06T07:01:46Z");
 
-    const st = records.filter((r) => r.type === "step_count" && r.sampleArray);
+    const st = measurements.filter((r) => r.type === "step_count" && r.sampleArray);
     expect(st, "expected 1 steps day-series").toHaveLength(1);
     const stSa = st[0]?.sampleArray;
     expect(stSa?.dataPoints).toHaveLength(8);
     expect(stSa?.dataPoints?.[2]).toBe(64);
     expect(stSa?.offsets?.[7], "want 660 — 11 min, incl. the bucket gap").toBe(660);
-    expect(st[0]?.startTime.endsWith("-08:00"), `steps are local time; startTime=${st[0]?.startTime}`).toBe(true);
+    expect(st[0]?.startTime?.endsWith("-08:00"), `steps are local time; startTime=${st[0]?.startTime}`).toBe(true);
 
-    const rhr = records.filter((r) => r.type === "resting_heart_rate");
+    const rhr = measurements.filter((r) => r.type === "resting_heart_rate");
     expect(rhr, "zero-value RHR day must be skipped").toHaveLength(1);
     expect(rhr[0]?.startTime).toBe("2024-01-06T00:00:00-08:00");
     expect(rhr[0]?.endTime).toBe("2024-01-07T00:00:00-08:00");
@@ -155,7 +156,7 @@ describe("mapFitbitTakeout", () => {
       const nested = mapFitbitTakeout([
         { name: "Takeout/Fitbit/Global Export Data/weight-2024-01-01.json", text: weightText },
       ]);
-      expect(nested.filter((r) => r.type === "body_mass")).toHaveLength(2);
+      expect(ofKind(nested, "Measurement").filter((r) => r.type === "body_mass")).toHaveLength(2);
     });
     it("entries missing logId/startTime are skipped", () => {
       expect(mapFitbitTakeout([{ name: "exercise-1.json", text: JSON.stringify([{ activityName: "Run" }]) }])).toEqual(

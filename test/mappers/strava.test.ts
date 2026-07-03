@@ -3,7 +3,7 @@
 // Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
 import { mapStrava } from "../../src/mappers/index.js";
-import { expectAllValid, expectValidAndStable, readExample } from "../helpers.js";
+import { expectAllValid, expectValidAndStable, ofKind, readExample } from "../helpers.js";
 
 const sample = () => JSON.parse(readExample("strava/strava-sample.json"));
 
@@ -41,7 +41,7 @@ describe("mapStrava", () => {
         expect(ids.has(l.ref), `dangling ${l.type} → ${l.ref} on ${r.id}`).toBe(true);
       }
     }
-    const mean = noHr.find((r) => r.type === "heart_rate_mean");
+    const mean = ofKind(noHr, "Measurement").find((r) => r.type === "heart_rate_mean");
     expect(
       mean,
       "hr-mean aggregate should still be emitted without the stream (activity summary stands alone)",
@@ -57,11 +57,11 @@ describe("mapStrava", () => {
 
   describe("malformed input (behavior pinned)", () => {
     it("empty input object throws the clear streams.time error (not a raw TypeError)", () => {
-      expect(() => mapStrava({ activity: {}, streams: {} } as any)).toThrow(/streams\.time/);
+      expect(() => mapStrava({ activity: {}, streams: {} })).toThrow(/streams\.time/);
     });
     it("activity missing its timing fields throws (invalid Date arithmetic)", () => {
       // Current behavior: elapsed_time undefined → NaN epoch → toISOString RangeError.
-      expect(() => mapStrava({ activity: {}, streams: { time: { data: [0, 1] } } } as any)).toThrow(RangeError);
+      expect(() => mapStrava({ activity: {}, streams: { time: { data: [0, 1] } } })).toThrow(RangeError);
     });
   });
 });

@@ -1,11 +1,19 @@
 // Strong app CSV export → OpenBody Session/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type Exercise,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Session,
+  type WorkUnit,
+} from "../types.js";
 import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** Map a Strong CSV export to OpenBody wire records (one Session per workout). */
-export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapStrong(csv: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const off = opts.utcOffset ?? "Z";
   // Delimiter sniffed from the header (Strong exports "," or ";" by locale); the shared
@@ -19,7 +27,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
     byWorkout.set(k, [...(byWorkout.get(k) ?? []), r]);
   }
 
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
   for (const [key, wrows] of byWorkout) {
     const f = wrows[0];
     if (f === undefined) continue; // unreachable: groups are created non-empty
@@ -28,7 +36,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
     // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
     const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
     const end = new Date(Date.parse(`${wall}Z`) + Number(f.Duration || 0) * 1000).toISOString().slice(0, 19) + off;
-    const session: OpenBodyRecord = {
+    const session: Session = {
       // The export has no workout id of its own, so the natural key (Date|Workout Name) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering
       // would renumber everything when one more workout is exported, defeating dedup.
@@ -41,7 +49,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
       endTime: end,
       name: f["Workout Name"],
       extension: { "io.strong.export": { workoutNo: f["Workout No"] } },
-      exercises: [] as OpenBodyRecord[],
+      exercises: [] as Exercise[],
     };
     const exGroups: { name: string | undefined; sets: Record<string, string>[] }[] = [];
     for (const r of wrows) {
@@ -61,12 +69,12 @@ export function mapStrong(csv: string, opts: MapOptions = {}): OpenBodyRecord[] 
           secs = num(s.Seconds),
           wt = num(s.Weight);
         const scoring = reps ? "reps" : dist ? "distance" : secs ? "time" : "reps";
-        const perf: OpenBodyRecord = {};
+        const perf: Performance = {};
         if (reps) perf.reps = reps;
         if (wt) perf.load = { value: wt, unit: "kg", basis: "marked_weight" };
         if (dist) perf.distance = { absolute: { value: dist, unit: "m" } };
         if (secs) perf.time = secs;
-        const wu: OpenBodyRecord = {
+        const wu: WorkUnit = {
           id: `${session.id}-ex${i}-set${j}`,
           recordType: "WorkUnit",
           scoring,

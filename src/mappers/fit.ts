@@ -16,7 +16,19 @@
 // with a decoder of their choice (e.g. `fit-file-parser`, MIT) and hands over the resulting
 // message lists. The mapping value-add — and the actual design work — is entirely in the FIT
 // → OpenBody semantic translation below, not in bytes-to-messages decoding.
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  type Block,
+  DEFAULT_SUBJECT,
+  type Extension,
+  type Link,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Prescription,
+  type Provenance,
+  type TargetWithRamp,
+  type WorkUnit,
+} from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, pickSeries } from "./shared.js";
 
 interface DecodedRecord {
@@ -105,7 +117,7 @@ const setRoleFor = (intensity?: string) => (intensity ? (SET_ROLE[intensity] ?? 
 // `duration_value` holds the message_index to loop back to, `target_value` the repeat count.
 const REPEAT_DURATION = /^repeat_until_/;
 
-function targetValue(step: DecodedWorkoutStep): OpenBodyRecord | undefined {
+function targetValue(step: DecodedWorkoutStep): TargetWithRamp | undefined {
   const low = step.custom_target_value_low,
     high = step.custom_target_value_high;
   if (low != null && high != null) {
@@ -119,40 +131,45 @@ function targetValue(step: DecodedWorkoutStep): OpenBodyRecord | undefined {
   return undefined; // target_type "open" (or no value at all): athlete's choice, no target.
 }
 
-function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): OpenBodyRecord {
-  const wu: OpenBodyRecord = { id: `fit-wkt-wu-${idx}`, recordType: "WorkUnit" };
+function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): WorkUnit {
   const setRole = setRoleFor(step.intensity);
-  if (setRole) wu.setRole = setRole;
 
-  const prescription: OpenBodyRecord = {};
+  // WorkUnit.scoring is required (§5.5), so the switch computes scoring/prescription/
+  // extension first and the record literal below assembles them — in the same key order
+  // the old field-by-field construction produced (id, recordType, setRole?, scoring,
+  // extension?, prescription). The FIT profile guarantees a `duration_value` for every
+  // value-carrying duration_type, hence the `as number` casts.
+  const prescription: Prescription = {};
+  let scoring: WorkUnit["scoring"];
+  let extension: Extension | undefined;
   switch (step.duration_type) {
     case "distance":
-      wu.scoring = "distance";
-      prescription.distance = { absolute: { value: step.duration_value, unit: "m" } };
+      scoring = "distance";
+      prescription.distance = { absolute: { value: step.duration_value as number, unit: "m" } };
       break;
     case "reps":
-      wu.scoring = "reps";
+      scoring = "reps";
       prescription.reps = step.duration_value;
       break;
     case "calories":
-      wu.scoring = "energy";
-      prescription.energy = { absolute: { value: step.duration_value, unit: "kcal" } };
+      scoring = "energy";
+      prescription.energy = { absolute: { value: step.duration_value as number, unit: "kcal" } };
       break;
     case "open":
-      wu.scoring = "time";
+      scoring = "time";
       prescription.time = { stopCondition: { kind: "open" } };
       break;
     case "time":
-      wu.scoring = "time";
-      prescription.time = { absolute: { value: step.duration_value, unit: "s" } };
+      scoring = "time";
+      prescription.time = { absolute: { value: step.duration_value as number, unit: "s" } };
       break;
     default:
       // Exotic conditional-stop durations (hr_less_than, power_greater_than, …): rare in
       // practice. Canonical-plus-residue (per the mapping guide's principles): degrade to a
       // valid, generically-scored WorkUnit and preserve the raw FIT condition losslessly.
-      wu.scoring = "continuous";
+      scoring = "continuous";
       prescription.time = { stopCondition: { kind: "open" } };
-      wu.extension = { fit: { duration_type: step.duration_type } };
+      extension = { fit: { duration_type: step.duration_type } };
   }
 
   const dim = step.target_type && INTENSITY_DIM[step.target_type];
@@ -160,21 +177,27 @@ function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): OpenBodyRecord {
     const value = targetValue(step);
     if (value) prescription.intensity = [{ dimension: dim.dimension, unit: dim.unit, value }];
   }
-  wu.prescription = prescription;
-  return wu;
+  return {
+    id: `fit-wkt-wu-${idx}`,
+    recordType: "WorkUnit",
+    ...(setRole ? { setRole } : {}),
+    scoring,
+    ...(extension ? { extension } : {}),
+    prescription,
+  };
 }
 
-function mapWorkout(data: FitInput, subject: string): OpenBodyRecord[] {
+function mapWorkout(data: FitInput, subject: string): LiveRecord[] {
   const wkt = data.workouts?.[0];
   const steps = [...(data.workout_steps ?? [])].sort((a, b) => indexOf(a.message_index) - indexOf(b.message_index));
 
-  const entries: { record: OpenBodyRecord; minIdx: number }[] = [];
+  const entries: { record: Block; minIdx: number }[] = [];
   for (const step of steps) {
     const idx = indexOf(step.message_index);
     if (step.duration_type && REPEAT_DURATION.test(step.duration_type)) {
       const startIdx = step.duration_value ?? idx;
       const rounds = step.target_value ?? 1;
-      const group: OpenBodyRecord[] = [];
+      const group: Block[] = [];
       for (let last = entries.at(-1); last !== undefined && last.minIdx >= startIdx; last = entries.at(-1)) {
         entries.pop();
         group.unshift(last.record);
@@ -186,7 +209,7 @@ function mapWorkout(data: FitInput, subject: string): OpenBodyRecord[] {
     } else {
       // WorkUnit has no `name` field — a step's name is structural (§5.3), so it lives on
       // the single-child Block wrapping each step, not the WorkUnit itself.
-      const block: OpenBodyRecord = {
+      const block: Block = {
         id: `fit-wkt-blk-${idx}`,
         recordType: "Block",
         children: [stepToWorkUnit(step, idx)],
@@ -210,7 +233,7 @@ function mapWorkout(data: FitInput, subject: string): OpenBodyRecord[] {
   ];
 }
 
-function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
+function mapActivity(data: FitInput, subject: string): LiveRecord[] {
   const s = data.sessions?.[0];
   const records = data.records ?? [];
   const start = s?.start_time ?? records[0]?.timestamp;
@@ -219,10 +242,10 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
   const t0 = start !== undefined ? new Date(start).getTime() : NaN;
   const end = s ? iso(new Date(t0 + (s.total_elapsed_time ?? 0) * 1000)) : records[records.length - 1]?.timestamp;
   const offsets = records.map((r) => (new Date(r.timestamp).getTime() - t0) / 1000);
-  const prov = (method: string) => ({ method, sourceApp: "fit" });
+  const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fit" });
 
-  const out: OpenBodyRecord[] = [];
-  const measuredBy: OpenBodyRecord[] = [];
+  const out: LiveRecord[] = [];
+  const measuredBy: Link[] = [];
   const pushStream = makeScalarStream({
     records: out,
     measuredBy,
@@ -261,7 +284,7 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
     measuredBy.push({ type: "measuredBy", ref: "fit-route" });
   }
 
-  const perf: OpenBodyRecord = {};
+  const perf: Performance = {};
   if (s?.total_distance != null) perf.distance = { absolute: { value: s.total_distance, unit: "m" } };
   if (s?.total_elapsed_time != null) perf.time = { absolute: { value: s.total_elapsed_time, unit: "s" } };
   if (s?.total_calories != null) perf.energy = { absolute: { value: s.total_calories, unit: "kcal" } };
@@ -282,7 +305,7 @@ function mapActivity(data: FitInput, subject: string): OpenBodyRecord[] {
 }
 
 /** Map a decoded FIT activity or workout file to OpenBody wire records (see file header for the decode-input contract). */
-export function mapFit(input: FitInput, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapFit(input: FitInput, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   return input.workouts?.length ? mapWorkout(input, subject) : mapActivity(input, subject);
 }

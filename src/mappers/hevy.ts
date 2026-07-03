@@ -1,13 +1,22 @@
 // Hevy CSV export → OpenBody Session/Block/Exercise/WorkUnit records.
 
 import { resolveExerciseRef } from "../resolve.js";
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  type Block,
+  DEFAULT_SUBJECT,
+  type Exercise,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Session,
+  type WorkUnit,
+} from "../types.js";
 import { contentHash, num, parseCsv, toRfc3339 } from "./csv.js";
 
 const SET_ROLE: Record<string, string> = { normal: "working", warmup: "warmup", drop: "drop", failure: "failure" };
 
 /** Map a Hevy CSV export to OpenBody wire records (one Session per workout). */
-export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapHevy(csv: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
 
@@ -17,12 +26,12 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
     sessions.set(k, [...(sessions.get(k) ?? []), r]);
   }
 
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
   for (const [key, srows] of sessions) {
     const f = srows[0];
     if (f === undefined) continue; // unreachable: groups are created non-empty
     const hasSuperset = srows.some((r) => r.superset_id !== "");
-    const session: OpenBodyRecord = {
+    const session: Session = {
       // The export has no workout id of its own, so the natural key (title|start_time) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering
       // would renumber everything when one more workout is exported, defeating dedup.
@@ -42,23 +51,28 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
       if (last && last.title === r.exercise_title && last.superset === r.superset_id) last.sets.push(r);
       else exGroups.push({ title: r.exercise_title, superset: r.superset_id, sets: [r] });
     }
-    const makeExercise = (g: (typeof exGroups)[number], idx: number) => {
+    const makeExercise = (g: (typeof exGroups)[number], idx: number): Exercise => {
       const title = g.title ?? "";
       const assisted = /assisted/i.test(title);
       const workUnits = g.sets.map((s, j) => {
-        const wu: OpenBodyRecord = {
+        // Hoisted so the truthy/null guards below narrow (num is pure — same values as before).
+        const reps = num(s.reps),
+          weight = num(s.weight_kg),
+          dist = num(s.distance_km),
+          secs = num(s.duration_seconds),
+          rpe = num(s.rpe);
+        const wu: WorkUnit = {
           id: `${session.id}-ex${idx}-set${j}`,
           recordType: "WorkUnit",
-          scoring: num(s.reps) != null ? "reps" : num(s.distance_km) != null ? "distance" : "time",
+          scoring: reps != null ? "reps" : dist != null ? "distance" : "time",
           setRole: SET_ROLE[s.set_type ?? ""] ?? s.set_type,
         };
-        const perf: OpenBodyRecord = {};
-        if (num(s.reps) != null) perf.reps = num(s.reps);
-        if (num(s.weight_kg))
-          perf.load = { value: num(s.weight_kg), unit: "kg", basis: assisted ? "assist" : "marked_weight" };
-        if (num(s.distance_km)) perf.distance = { absolute: { value: num(s.distance_km), unit: "km" } };
-        if (num(s.duration_seconds)) perf.time = num(s.duration_seconds);
-        if (num(s.rpe) != null) perf.effortLoad = [{ kind: "internal", method: "RPE", value: num(s.rpe) }];
+        const perf: Performance = {};
+        if (reps != null) perf.reps = reps;
+        if (weight) perf.load = { value: weight, unit: "kg", basis: assisted ? "assist" : "marked_weight" };
+        if (dist) perf.distance = { absolute: { value: dist, unit: "km" } };
+        if (secs) perf.time = secs;
+        if (rpe != null) perf.effortLoad = [{ kind: "internal", method: "RPE", value: rpe }];
         wu.performance = perf;
         return wu;
       });
@@ -73,7 +87,7 @@ export function mapHevy(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
     };
     if (hasSuperset) {
       // §5.3 at-most-one container: any superset ⇒ everything goes under blocks[].
-      const blocks: OpenBodyRecord[] = [];
+      const blocks: Block[] = [];
       const used = new Set<number>();
       exGroups.forEach((g, i) => {
         if (used.has(i)) return;

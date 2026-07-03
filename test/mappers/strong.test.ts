@@ -3,7 +3,7 @@
 // Ported from scripts/test-mappers.ts.
 import { describe, expect, it } from "vitest";
 import { mapStrong } from "../../src/mappers/index.js";
-import { expectValidAndStable, readExample } from "../helpers.js";
+import { expectValidAndStable, ofKind, readExample, refObj } from "../helpers.js";
 
 const strongCsv = readExample("strong/strong-sample.csv");
 
@@ -13,7 +13,7 @@ describe("mapStrong", () => {
   });
 
   it("maps the wall-clock window timezone-independently", () => {
-    const strong = mapStrong(strongCsv);
+    const strong = ofKind(mapStrong(strongCsv), "Session");
     expect(`${strong[0]?.startTime}..${strong[0]?.endTime}`, "want 18:00Z..19:00Z regardless of host TZ").toBe(
       "2025-12-20T18:00:00Z..2025-12-20T19:00:00Z",
     );
@@ -34,10 +34,16 @@ describe("mapStrong", () => {
 
   // "Bench Press (Barbell)" must land on the same canonical id as Hevy's spelling.
   it("resolves exercise names to canonical ids (cross-app convergence)", () => {
-    const refs = mapStrong(strongCsv)
-      .flatMap((s) => [...(s.exercises ?? []), ...(s.blocks ?? []).flatMap((b: any) => b.children ?? [])])
-      .map((e: any) => e.exerciseRef);
-    const bench = refs.find((r: any) => r.opaque === "Bench Press (Barbell)");
+    const refs = ofKind(mapStrong(strongCsv), "Session")
+      .flatMap((s) => [
+        ...(s.exercises ?? []),
+        ...ofKind(
+          (s.blocks ?? []).flatMap((b) => b.children ?? []),
+          "Exercise",
+        ),
+      ])
+      .map((e) => refObj(e.exerciseRef));
+    const bench = refs.find((r) => r.opaque === "Bench Press (Barbell)");
     expect(bench?.id).toBe("bench-press.barbell.flat");
   });
 

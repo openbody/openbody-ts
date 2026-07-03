@@ -1,7 +1,7 @@
 // Cross-format mapper plumbing shared by the telemetry mappers (strava.ts, fit.ts,
 // gpx.ts, tcx.ts, …). Internal, deliberately NOT re-exported from the package entry
 // (src/index.ts) — implementation details, not public API.
-import type { OpenBodyRecord } from "../types.js";
+import type { Link, LiveRecord, Provenance } from "../types.js";
 
 /** RFC 3339 at whole-second precision — trims the ".000" that toISOString always emits. */
 export const iso = (d: Date): string => d.toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -22,14 +22,14 @@ export function makeDisciplineMapper(map: Record<string, string>, namespace: str
 /** Everything a scalar sampleArray Measurement shares with its siblings from one recording. */
 export interface ScalarStreamSink {
   /** Output array the Measurement record is pushed onto. */
-  records: OpenBodyRecord[];
-  /** measuredBy link list (for the owning Session/WorkUnit) the `{ type: "measuredBy", ref: id }` entry is pushed onto. */
-  measuredBy: OpenBodyRecord[] | { type: string; ref: string }[];
+  records: LiveRecord[];
+  /** measuredBy link list (for the owning Session/WorkUnit) the `{ type: "measuredBy", ref: id }` entry is pushed onto (§7.2). */
+  measuredBy: Link[];
   subject: string;
   offsets: number[];
   startTime: string | undefined;
   endTime: string | undefined;
-  provenance: OpenBodyRecord;
+  provenance: Provenance;
 }
 
 /**

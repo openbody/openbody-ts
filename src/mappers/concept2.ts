@@ -52,7 +52,17 @@
 //     ride), so it stays opaque-only. The raw Type string always rides in
 //     `exerciseRef.opaque` (§6.5 lossless floor).
 
-import { DEFAULT_SUBJECT, type MapOptions, type OpenBodyRecord } from "../types.js";
+import {
+  DEFAULT_SUBJECT,
+  type ExerciseRefObject,
+  type Intensity,
+  type LiveRecord,
+  type MapOptions,
+  type Performance,
+  type Provenance,
+  type Session,
+  type WorkUnit,
+} from "../types.js";
 import { num, parseCsv, toRfc3339 } from "./csv.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
@@ -76,14 +86,19 @@ const MACHINE: Record<string, { discipline: string; exerciseId?: string }> = {
   snow: { discipline: "skiing" },
 };
 
-interface Piece {
-  kind: "single" | "intervals" | "variable";
-  scoring?: "time" | "distance" | "continuous"; // single pieces
-  n?: number; // interval count
-  childScoring?: "time" | "distance";
-  childValue?: number; // metres or seconds per interval
-  restSec?: number; // rest per interval
-}
+type Piece =
+  | { kind: "single"; scoring: "time" | "distance" | "continuous" }
+  | {
+      kind: "intervals";
+      /** Interval count. */
+      n: number;
+      childScoring: "time" | "distance";
+      /** Metres or seconds per interval. */
+      childValue?: number;
+      /** Rest per interval. */
+      restSec?: number;
+    }
+  | { kind: "variable" };
 
 /** Infer the workout structure from the PM5-generated Description (see file header). */
 function inferPiece(
@@ -126,17 +141,17 @@ function inferPiece(
 }
 
 /** Map a Concept2 Logbook season CSV export to OpenBody wire records (one Session per row). */
-export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[] {
+export function mapConcept2(csv: string, opts: MapOptions = {}): LiveRecord[] {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const rows = parseCsv(csv);
-  const records: OpenBodyRecord[] = [];
+  const records: LiveRecord[] = [];
 
   rows.forEach((r, i) => {
     const logId = r["Log ID"] || String(i + 1);
     const sid = `c2-${logId}`;
     const rawType = r["Type"] ?? "";
     const machine = MACHINE[rawType.toLowerCase()] ?? { discipline: `concept2:${rawType.toLowerCase() || "unknown"}` };
-    const exerciseRef: OpenBodyRecord = machine.exerciseId
+    const exerciseRef: ExerciseRefObject = machine.exerciseId
       ? { id: machine.exerciseId, opaque: rawType }
       : { opaque: rawType || "erg" };
 
@@ -157,14 +172,14 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     const off = opts.utcOffset ?? "Z";
     const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
     const end = new Date(Date.parse(`${wall}Z`) + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
-    const prov = {
+    const prov: Provenance = {
       method: "sensor",
       sourceApp: "concept2",
       ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}),
     };
 
     // Whole-workout achieved intensity (§5.13) — only honest on a single piece (see header).
-    const intensity: OpenBodyRecord[] = [];
+    const intensity: Intensity[] = [];
     if (piece.kind === "single") {
       if (strokeRate)
         intensity.push({ dimension: "cadence", unit: "/min", value: { absolute: { value: strokeRate } } });
@@ -172,7 +187,7 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     }
 
     // Residue (extension.concept2): every summary column that has no honest core home here.
-    const ext: OpenBodyRecord = {};
+    const ext: Record<string, unknown> = {};
     if (r["Pace"]) ext.pace = r["Pace"]; // /500m (RowErg/SkiErg) or /1000m (BikeErg)
     if (num(r["Stroke Count"])) ext.strokeCount = num(r["Stroke Count"]);
     if (num(r["Cal/Hour"])) ext.calHour = num(r["Cal/Hour"]);
@@ -181,11 +196,14 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
     if (piece.kind !== "single" && avgWatts) ext.avgWatts = avgWatts;
     if (restDist) ext.restDistance = restDist;
     if (piece.kind === "variable" && restSec) ext.restTimeSeconds = restSec;
-    if (piece.scoring === "distance" && workSec != null) ext.workTimeSeconds = workSec; // the piece's result time (§5.5 — see header)
-    if (piece.scoring === "time" && workDist != null) ext.workDistance = workDist;
-    if (totalCal && piece.scoring !== "continuous") ext.totalCal = totalCal;
+    // `piece.scoring` exists only on single pieces (the Piece union above), matching the old
+    // optional-field reads: any non-single kind fell through these guards unchanged.
+    const singleScoring = piece.kind === "single" ? piece.scoring : undefined;
+    if (singleScoring === "distance" && workSec != null) ext.workTimeSeconds = workSec; // the piece's result time (§5.5 — see header)
+    if (singleScoring === "time" && workDist != null) ext.workDistance = workDist;
+    if (totalCal && singleScoring !== "continuous") ext.totalCal = totalCal;
 
-    const session: OpenBodyRecord = {
+    const session: Session = {
       id: sid,
       recordType: "Session",
       subject,
@@ -203,9 +221,10 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
       // Fixed intervals: the PM5 enforces the per-interval work value, so expanding the
       // Description into per-interval WorkUnits asserts only machine-guaranteed facts.
       // Rest follows every interval on a PM5 (total rest = n × rest), so each child gets it.
-      const { childScoring, childValue, restSec: perIntervalRest } = piece;
-      const children = Array.from({ length: piece.n }, (_, j) => {
-        const perf: OpenBodyRecord =
+      const { childScoring, restSec: perIntervalRest } = piece;
+      const childValue = piece.childValue; // the `!= null` guard above narrowed it to number
+      const children = Array.from({ length: piece.n }, (_, j): WorkUnit => {
+        const perf: Performance =
           childScoring === "distance"
             ? { distance: { absolute: { value: childValue, unit: "m" } } }
             : { time: { absolute: { value: childValue, unit: "s" } } };
@@ -222,12 +241,14 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): OpenBodyRecord[
         { id: `${sid}-blk`, recordType: "Block", ...(r["Description"] ? { name: r["Description"] } : {}), children },
       ];
     } else {
-      const perf: OpenBodyRecord = {};
+      const perf: Performance = {};
       // A "single" piece always carries a scoring from inferPiece; "continuous" is the
       // honest degradation for any shape that somehow reaches here without one.
-      const scoring = piece.kind === "variable" ? "continuous" : (piece.scoring ?? "continuous");
-      if (scoring === "distance") perf.distance = { absolute: { value: workDist, unit: "m" } };
-      else if (scoring === "time") perf.time = { absolute: { value: workSec, unit: "s" } };
+      const scoring = piece.kind === "single" ? piece.scoring : "continuous";
+      // inferPiece invariant: it only returns "distance"/"time" scoring after matching the
+      // Description against that same defined work total, so these casts never see undefined.
+      if (scoring === "distance") perf.distance = { absolute: { value: workDist as number, unit: "m" } };
+      else if (scoring === "time") perf.time = { absolute: { value: workSec as number, unit: "s" } };
       else {
         if (workDist != null) perf.distance = { absolute: { value: workDist, unit: "m" } };
         if (workSec != null) perf.time = { absolute: { value: workSec, unit: "s" } };
