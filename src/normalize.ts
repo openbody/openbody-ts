@@ -6,7 +6,7 @@
 // record byte strings. Two documents are equivalent iff these sets are equal.
 // Error contract (src/errors.ts): structurally malformed records (invalid
 // roundScheme/sets combinations, non-numeric fixed-point parts) throw NormalizeError.
-import { canonicalString, deepCanon, isFixedPointLike, type Json } from "./canonical.js";
+import { canonicalString, deepCanon, defineOwn, isFixedPointLike, type Json } from "./canonical.js";
 import { NormalizeError } from "./errors.js";
 import { LosslessNumber } from "./parse.js";
 // Inline container fields by recordType (§5.1) — shared with validate.ts, see src/records.ts.
@@ -47,7 +47,7 @@ function clone<T>(x: T): T {
   if (Array.isArray(x)) return x.map(clone) as unknown as T;
   if (x && typeof x === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(x)) out[k] = clone(v);
+    for (const [k, v] of Object.entries(x)) defineOwn(out, k, clone(v));
     return out as T;
   }
   return x;

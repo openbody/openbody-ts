@@ -15,6 +15,19 @@ export interface FixedPoint {
   exponent: string;
 }
 
+/**
+ * Assign an OWN data property — the safe form of `out[k] = v` when `k` comes from arbitrary
+ * (possibly untrusted) input. A bare `out["__proto__"] = v` hits Object.prototype's `__proto__`
+ * setter: it reparents `out` and silently drops the payload instead of creating a key. Defining
+ * the property matches JSON.parse / {@link parseLossless} (parse.ts uses the same guard), so a
+ * literal `"__proto__"` wire key stays a faithful own property through canonicalization rather
+ * than vanishing from the canonical bytes. Shared by the object-rebuilding steps in this module
+ * and `clone()` in normalize.ts; NOT re-exported from index.ts (package-internal).
+ */
+export function defineOwn<V>(target: Record<string, V>, key: string, value: V): void {
+  Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
+}
+
 const TIMESTAMP_FIELDS = new Set(["startTime", "endTime", "asOf", "from", "to"]);
 
 /**
@@ -125,8 +138,9 @@ export function deepCanon(value: unknown, inOpaque = false): Json {
     const out: Record<string, Json> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       const childOpaque = inOpaque || OPAQUE_KEYS.has(k);
-      out[k] =
+      const canoned =
         !inOpaque && typeof v === "string" && TIMESTAMP_FIELDS.has(k) ? canonTimestamp(v) : deepCanon(v, childOpaque);
+      defineOwn(out, k, canoned);
     }
     return out;
   }
@@ -170,7 +184,7 @@ function orderSetArrays(value: Json): Json {
           return ab < bb ? -1 : ab > bb ? 1 : 0;
         });
       }
-      out[k] = nv;
+      defineOwn(out, k, nv);
     }
     return out;
   }

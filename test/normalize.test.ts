@@ -6,6 +6,7 @@
 // standalone safety net.
 import { describe, expect, it } from "vitest";
 import { equivalent, type NormalizeInput, normalizeDocument } from "../src/normalize.js";
+import { parseLossless } from "../src/parse.js";
 import type { WireRecord } from "../src/types.js";
 
 // Normalize, then parse the canonical bytes back to records. Every record has a unique id
@@ -209,5 +210,31 @@ describe("equivalent (EQUIVALENCE.md)", () => {
         { id: "s1", recordType: "Session", subject: "u2" },
       ),
     ).toBe(false);
+  });
+});
+
+describe('normalizeDocument: a literal "__proto__" wire key (defineOwn / untrusted-input fidelity)', () => {
+  // parseLossless preserves a literal "__proto__" key as an OWN property (parse.ts guard). The
+  // clone → deepCanon → canonicalString pipeline rebuilds objects key-by-key; a bare
+  // `out["__proto__"] = v` would hit Object.prototype's setter and silently drop it, so the
+  // oracle must define keys instead. `extension` is an opaque, producer-arbitrary subtree.
+  const withProto = (): NormalizeInput =>
+    parseLossless(
+      '{"id":"s1","recordType":"Session","subject":"u1","extension":{"vendor":{"__proto__":"sentinel","keep":1}}}',
+    ) as NormalizeInput;
+  const withoutProto: NormalizeInput = {
+    id: "s1",
+    recordType: "Session",
+    subject: "u1",
+    extension: { vendor: { keep: 1 } },
+  };
+
+  it("survives canonicalization instead of being dropped by the prototype setter", () => {
+    const bytes = normalizeDocument(withProto())[0] ?? "";
+    expect(bytes).toContain('"__proto__":"sentinel"');
+  });
+
+  it("makes a document carrying it NOT equivalent to one without it", () => {
+    expect(equivalent(withProto(), withoutProto)).toBe(false);
   });
 });
