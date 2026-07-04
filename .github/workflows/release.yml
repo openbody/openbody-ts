@@ -1,25 +1,23 @@
 name: release
 
-# Maintains a single "Version Packages" PR: when changesets land on main, this opens/updates
-# one PR that bumps the version + regenerates CHANGELOG.md and deletes the consumed changesets.
-# Merging that PR is how a release is cut. It does NOT touch main directly, and it does NOT
-# publish — so nothing unexpected ever ships. On a push with no pending changesets it's a no-op.
+# One-click release. This org can't let Actions open PRs (enterprise policy), so instead of
+# the Changesets "Version Packages" PR, this consumes the pending changesets and commits the
+# version bump + CHANGELOG straight to main. Trigger it from the Actions tab → release →
+# "Run workflow" when you want to cut a release. Runs ONLY on manual dispatch — never on push,
+# so it makes no noise until you ask for it.
 on:
-  push:
-    branches: [main]
-
-# One release run at a time; a newer push supersedes an in-flight one.
-concurrency: release-${{ github.ref }}
+  workflow_dispatch:
 
 permissions:
-  contents: write # push the version-bump branch
-  pull-requests: write # open/update the Version Packages PR
+  contents: write # commit the version bump to main
+
+concurrency: release
 
 jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      HUSKY: "0" # the changesets action makes a git commit — don't fire local hooks in CI
+      HUSKY: "0" # don't fire the local pre-commit hook on the CI commit
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,23 +27,18 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Open or update the Version Packages PR
-        uses: changesets/action@v1
-        # The ORG currently disallows Actions-created PRs (Org Settings → Actions → General →
-        # "Allow GitHub Actions to create and approve pull requests"). Until that's enabled, the
-        # action still bumps + pushes the `changeset-release/main` branch but can't open the PR —
-        # tolerate that here so the run stays green instead of red-on-every-push. Once the org
-        # setting is on, this `continue-on-error` can be dropped.
-        continue-on-error: true
-        with:
-          version: npm run version-packages
-          commit: "chore(release): version packages"
-          title: "chore(release): version packages"
-          # PUBLISH IS INTENTIONALLY DISABLED until this package goes public on npm.
-          # To turn it on later: add an `NPM_TOKEN` repo secret, then add this line —
-          #   publish: npm run release
-          # and export it below: `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`.
-          # (`npm run release` → changeset publish → npm publish → prepack, which needs the
-          #  sibling openbody / openbody-registry checkouts + sync — mirror conformance.yml.)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Version (consume changesets → bump + CHANGELOG) and commit to main
+        run: |
+          npx changeset version
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No pending changesets — nothing to release."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): version packages"
+          git push
+      # PUBLISH IS INTENTIONALLY DISABLED until this package goes public on npm. To enable:
+      # add an NPM_TOKEN secret + the sibling-repo checkouts prepack needs (mirror
+      # conformance.yml's sync-schema/sync-crosswalk), then a step running `npm run release`
+      # with `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`.
