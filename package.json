@@ -1,6 +1,6 @@
 {
   "name": "@openbody/openbody-ts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "OpenBody reference implementation (TypeScript): validate + canonical normalize (the conformance suite's EQUIVALENCE.md method) + conformance vector runner. Apache-2.0.",
   "license": "Apache-2.0",
