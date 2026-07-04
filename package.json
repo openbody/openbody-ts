@@ -38,6 +38,7 @@
     "src",
     "vendor",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -50,7 +51,10 @@
     "sync-schema": "node scripts/sync-schema.mjs",
     "sync-crosswalk": "node scripts/sync-crosswalk.mjs",
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "npm run sync-schema && npm run sync-crosswalk && npm run build"
+    "prepack": "npm run sync-schema && npm run sync-crosswalk && npm run build",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
   },
   "dependencies": {
     "ajv": "^8.17.1",
@@ -59,6 +63,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.9",
     "fast-check": "^4.8.0",
