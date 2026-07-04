@@ -25,6 +25,7 @@ export {
   mapFitbitTakeout,
   mapGpx,
   mapHevy,
+  mapHevyMeasurements,
   mapOpenBodyToStrong,
   mapStrava,
   mapStrong,

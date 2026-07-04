@@ -71,8 +71,9 @@ const canonical = normalizeDocument(records);
 console.log(`${records.length} wire record(s) -> ${canonical.length} canonical form(s)`);
 ```
 
-Every inbound mapper (`mapHevy`, `mapStrong`, `mapStrava`, `mapAppleHealth`, `mapFit`,
-`mapFitbitTakeout`, `mapGpx`, `mapTcx`, `mapConcept2`, `mapTheCrag`) has this same shape:
+Every inbound mapper (`mapHevy`, `mapHevyMeasurements`, `mapStrong`, `mapStrava`,
+`mapAppleHealth`, `mapFit`, `mapFitbitTakeout`, `mapGpx`, `mapTcx`, `mapConcept2`,
+`mapTheCrag`) has this same shape:
 `(input, opts?) => MapperResult` — destructure `{ records, warnings }` and validate each
 mapped **wire** record, as above. `normalizeDocument`'s output is a different, string-
 fixed-point *comparison* form (§8.3) that deliberately does **not** pass the same

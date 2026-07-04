@@ -11,6 +11,7 @@ export { type FitInput, mapFit } from "./fit.js";
 export { type FitbitFile, type FitbitMapOptions, mapFitbitTakeout } from "./fitbit.js";
 export { mapGpx } from "./gpx.js";
 export { mapHevy } from "./hevy.js";
+export { mapHevyMeasurements } from "./hevy-measurements.js";
 export { mapStrava, type StravaInput } from "./strava.js";
 export { mapStrong } from "./strong.js";
 export { mapTcx } from "./tcx.js";
