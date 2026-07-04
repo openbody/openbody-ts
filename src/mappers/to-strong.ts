@@ -201,6 +201,150 @@ function metricColumn(
   return out === undefined ? { why: "has a non-numeric value" } : { out };
 }
 
+/** Report one thing Strong's CSV could not represent (or throw under `{ strict: true }`). */
+type OmitFn = (recordId: string | undefined, field: string | undefined, reason: string) => void;
+
+/**
+ * Collapse a Session's §5.1 container hierarchy to the flat list of Exercises Strong's CSV
+ * keys on. `exercises` pass through; a bare `workUnit` that names its own exercise becomes a
+ * one-WorkUnit Exercise; `blocks` flatten (Strong has no superset/round concept — children
+ * become consecutive plain sets and the lost structure is reported via `omit`).
+ */
+function flattenToExercises(session: Session, omit: OmitFn): Exercise[] {
+  const exercises: Exercise[] = [];
+  const walk = (node: Block | Exercise | WorkUnit) => {
+    if (node?.recordType === "Exercise") exercises.push(node);
+    else if (node?.recordType === "WorkUnit") {
+      // A bare WorkUnit (Session.workUnits or a Block child) can stand alone only if it
+      // names its own exercise.
+      if (node.exerciseRef)
+        exercises.push({ recordType: "Exercise", id: node.id, exerciseRef: node.exerciseRef, workUnits: [node] });
+      else omit(node.id, "exerciseRef", "WorkUnit carries no exerciseRef — no Exercise Name to write; set dropped");
+    } else if (node?.recordType === "Block") {
+      if (node.grouping !== undefined)
+        omit(
+          node.id,
+          "grouping",
+          `Block grouping "${node.grouping}" flattened to consecutive plain sets — Strong CSV has no superset/group concept`,
+        );
+      if (node.roundScheme !== undefined)
+        omit(
+          node.id,
+          "roundScheme",
+          `Block roundScheme [${node.roundScheme}] dropped — children emitted once; Strong CSV has no rounds`,
+        );
+      if (node.repetitions !== undefined)
+        omit(
+          node.id,
+          "repetitions",
+          `Block repetitions (${node.repetitions}) dropped — children emitted once; Strong CSV has no rounds`,
+        );
+      if (node.scoring !== undefined)
+        omit(
+          node.id,
+          "scoring",
+          `Block scoring scheme "${node.scoring?.scheme}" dropped — Strong CSV has no block-level schemes`,
+        );
+      (node.children ?? []).forEach(walk);
+    }
+  };
+  (session.exercises ?? []).forEach(walk);
+  (session.blocks ?? []).forEach(walk);
+  (session.workUnits ?? []).forEach(walk);
+  return exercises;
+}
+
+/** The per-set column values a WorkUnit contributes to a Strong CSV row (all defaulted). */
+interface StrongSetCells {
+  weight: string;
+  reps: string;
+  distance: string;
+  seconds: string;
+  notes: string;
+  rpe: string;
+}
+
+/**
+ * Compute one WorkUnit's Strong columns (reps/weight/distance/seconds/RPE + notes),
+ * converting units with exact decimal math. Returns `undefined` when the WorkUnit carries
+ * nothing Strong's columns can hold (the set is dropped); every material loss is reported
+ * via `omit`.
+ */
+function workUnitToRow(wu: WorkUnit, omit: OmitFn): StrongSetCells | undefined {
+  const wuId = wu.id;
+  const perf = wu.performance ?? {};
+
+  // Reps are dimensionless — no unit conversion, just the exact decimal.
+  const repsPart = scalarPart(perf.reps);
+  let reps: string | undefined;
+  if (repsPart.why) omit(wuId, "reps", `reps is ${repsPart.why} — Reps column left at 0`);
+  else if (repsPart.raw !== undefined) reps = decTimes(repsPart.raw, "1");
+
+  // Weight: Load carries its unit on Load.unit (§5.12); an explicit inner `absolute`
+  // unit wins if present. A bare scalar with no unit is kg (mirrors `mapStrong`).
+  let weight: string | undefined;
+  if (perf.load !== undefined) {
+    const p = scalarPart(perf.load.value);
+    if (p.why) omit(wuId, "load", `load is ${p.why} — Strong's Weight column needs an absolute kg value; left at 0`);
+    else if (p.raw !== undefined) {
+      const unit = p.unit ?? perf.load.unit ?? "kg";
+      const factor = MASS_TO_KG[unit];
+      if (factor === undefined)
+        omit(
+          wuId,
+          "load",
+          `load unit "${unit}" has no exact conversion to kg (band/machine-level loads have no Strong representation) — Weight left at 0`,
+        );
+      else {
+        weight = decTimes(p.raw, factor);
+        if (weight === undefined) omit(wuId, "load", "load has a non-numeric value — Weight left at 0");
+      }
+    }
+  }
+
+  const dist = metricColumn(perf.distance, LENGTH_TO_M, "m", "metres");
+  if (dist.why) omit(wuId, "distance", `distance ${dist.why} — Distance column left at 0`);
+
+  const secs = metricColumn(perf.time, TIME_TO_S, "s", "seconds");
+  if (secs.why) omit(wuId, "time", `time ${secs.why} — Seconds column left at 0`);
+
+  if (perf.energy !== undefined) omit(wuId, "energy", "energy has no Strong CSV column — dropped");
+
+  // RPE: the one effortLoad Strong can hold (single-valued, method "RPE").
+  let rpe: string | undefined;
+  for (const e of perf.effortLoad ?? []) {
+    if (String(e.method).toUpperCase() === "RPE" && e.value !== undefined && rpe === undefined)
+      rpe = decTimes(e.value, "1");
+    else
+      omit(
+        wuId,
+        "effortLoad",
+        `effortLoad ${e.method ?? e.kind}${e.range ? " (range)" : ""} has no Strong CSV column (only a single RPE value) — dropped`,
+      );
+  }
+
+  if (reps === undefined && weight === undefined && dist.out === undefined && secs.out === undefined) {
+    omit(wuId, undefined, `WorkUnit (scoring "${wu.scoring}") carries nothing Strong's columns can hold — set dropped`);
+    return undefined;
+  }
+  if (wu.scoring === "energy" || wu.scoring === "continuous") {
+    omit(
+      wuId,
+      "scoring",
+      `scoring "${wu.scoring}" has no Strong equivalent — emitted as a plain set (re-imports as reps/distance/time-scored)`,
+    );
+  }
+
+  return {
+    weight: weight ?? "0",
+    reps: reps ?? "0",
+    distance: dist.out ?? "0",
+    seconds: secs.out ?? "0",
+    notes: wu.notes ?? "",
+    rpe: rpe ?? "",
+  };
+}
+
 /**
  * Map OpenBody wire records (Sessions of Exercises/WorkUnits) to a Strong-importable CSV.
  *
@@ -216,7 +360,7 @@ function metricColumn(
  */
 export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOptions = {}): ToStrongResult {
   const omissions: StrongOmission[] = [];
-  const omit = (recordId: string | undefined, field: string | undefined, reason: string) => {
+  const omit: OmitFn = (recordId, field, reason) => {
     if (opts.strict) {
       throw new Error(
         `mapOpenBodyToStrong (strict): ${reason} [record ${recordId ?? "?"}${field ? `, field ${field}` : ""}] — omit \`strict\` to degrade gracefully and get an omissions report instead`,
@@ -226,7 +370,7 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
   };
 
   const rows: string[][] = [];
-  let wIdx = 0;
+  let workoutIndex = 0;
 
   for (const record of records) {
     if (record.recordType !== "Session") {
@@ -237,141 +381,27 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
     // deletes, §7.5). A tombstone carries no payload and every field read below is optional,
     // so reading it as a payload-less Session preserves the old behavior exactly.
     const session = record as Session;
-    wIdx++;
+    workoutIndex++;
 
     const date = toStrongDate(session.startTime);
     const duration =
       session.startTime && session.endTime
         ? Math.round((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000)
         : 0;
-    const workoutNo = session.extension?.["io.strong.export"]?.workoutNo ?? String(wIdx);
+    const workoutNo = session.extension?.["io.strong.export"]?.workoutNo ?? String(workoutIndex);
 
-    // Session.exercises passes through; Session.workUnits (the collapsed §5.1 hierarchy —
-    // strava/fit/gpx/tcx/concept2/thecrag produce these) joins it where a unit names its own
-    // exercise; Session.blocks flattens (§5.3 at-most-one container): Strong's flat CSV has
-    // no superset/round concept, so Block children become consecutive plain sets and the
-    // lost structure is reported.
-    const exercises: Exercise[] = [];
-    const walk = (node: Block | Exercise | WorkUnit) => {
-      if (node?.recordType === "Exercise") exercises.push(node);
-      else if (node?.recordType === "WorkUnit") {
-        // A bare WorkUnit (Session.workUnits or a Block child) can stand alone only if it
-        // names its own exercise.
-        if (node.exerciseRef)
-          exercises.push({ recordType: "Exercise", id: node.id, exerciseRef: node.exerciseRef, workUnits: [node] });
-        else omit(node.id, "exerciseRef", "WorkUnit carries no exerciseRef — no Exercise Name to write; set dropped");
-      } else if (node?.recordType === "Block") {
-        if (node.grouping !== undefined)
-          omit(
-            node.id,
-            "grouping",
-            `Block grouping "${node.grouping}" flattened to consecutive plain sets — Strong CSV has no superset/group concept`,
-          );
-        if (node.roundScheme !== undefined)
-          omit(
-            node.id,
-            "roundScheme",
-            `Block roundScheme [${node.roundScheme}] dropped — children emitted once; Strong CSV has no rounds`,
-          );
-        if (node.repetitions !== undefined)
-          omit(
-            node.id,
-            "repetitions",
-            `Block repetitions (${node.repetitions}) dropped — children emitted once; Strong CSV has no rounds`,
-          );
-        if (node.scoring !== undefined)
-          omit(
-            node.id,
-            "scoring",
-            `Block scoring scheme "${node.scoring?.scheme}" dropped — Strong CSV has no block-level schemes`,
-          );
-        (node.children ?? []).forEach(walk);
-      }
-    };
-    (session.exercises ?? []).forEach(walk);
-    (session.blocks ?? []).forEach(walk);
-    (session.workUnits ?? []).forEach(walk);
-
-    for (const ex of exercises) {
+    for (const ex of flattenToExercises(session, omit)) {
       const er = ex.exerciseRef;
       const name =
         typeof er === "string"
           ? (sourceNameForId(er, "strong") ?? er)
           : (er?.opaque ?? (er?.id ? (sourceNameForId(er.id, "strong") ?? er.id) : ""));
-      const workUnits: WorkUnit[] = ex.workUnits ?? [];
 
       let setOrder = 0;
-      for (const wu of workUnits) {
+      for (const wu of ex.workUnits ?? []) {
         if (wu.recordType !== "WorkUnit") continue;
-        const wuId = wu.id;
-        const perf = wu.performance ?? {};
-
-        // Reps are dimensionless — no unit conversion, just the exact decimal.
-        const repsPart = scalarPart(perf.reps);
-        let reps: string | undefined;
-        if (repsPart.why) omit(wuId, "reps", `reps is ${repsPart.why} — Reps column left at 0`);
-        else if (repsPart.raw !== undefined) reps = decTimes(repsPart.raw, "1");
-
-        // Weight: Load carries its unit on Load.unit (§5.12); an explicit inner `absolute`
-        // unit wins if present. A bare scalar with no unit is kg (mirrors `mapStrong`).
-        let weight: string | undefined;
-        if (perf.load !== undefined) {
-          const p = scalarPart(perf.load.value);
-          if (p.why)
-            omit(wuId, "load", `load is ${p.why} — Strong's Weight column needs an absolute kg value; left at 0`);
-          else if (p.raw !== undefined) {
-            const unit = p.unit ?? perf.load.unit ?? "kg";
-            const factor = MASS_TO_KG[unit];
-            if (factor === undefined)
-              omit(
-                wuId,
-                "load",
-                `load unit "${unit}" has no exact conversion to kg (band/machine-level loads have no Strong representation) — Weight left at 0`,
-              );
-            else {
-              weight = decTimes(p.raw, factor);
-              if (weight === undefined) omit(wuId, "load", "load has a non-numeric value — Weight left at 0");
-            }
-          }
-        }
-
-        const dist = metricColumn(perf.distance, LENGTH_TO_M, "m", "metres");
-        if (dist.why) omit(wuId, "distance", `distance ${dist.why} — Distance column left at 0`);
-
-        const secs = metricColumn(perf.time, TIME_TO_S, "s", "seconds");
-        if (secs.why) omit(wuId, "time", `time ${secs.why} — Seconds column left at 0`);
-
-        if (perf.energy !== undefined) omit(wuId, "energy", "energy has no Strong CSV column — dropped");
-
-        // RPE: the one effortLoad Strong can hold (single-valued, method "RPE").
-        let rpe: string | undefined;
-        for (const e of perf.effortLoad ?? []) {
-          if (String(e.method).toUpperCase() === "RPE" && e.value !== undefined && rpe === undefined)
-            rpe = decTimes(e.value, "1");
-          else
-            omit(
-              wuId,
-              "effortLoad",
-              `effortLoad ${e.method ?? e.kind}${e.range ? " (range)" : ""} has no Strong CSV column (only a single RPE value) — dropped`,
-            );
-        }
-
-        if (reps === undefined && weight === undefined && dist.out === undefined && secs.out === undefined) {
-          omit(
-            wuId,
-            undefined,
-            `WorkUnit (scoring "${wu.scoring}") carries nothing Strong's columns can hold — set dropped`,
-          );
-          continue;
-        }
-        if (wu.scoring === "energy" || wu.scoring === "continuous") {
-          omit(
-            wuId,
-            "scoring",
-            `scoring "${wu.scoring}" has no Strong equivalent — emitted as a plain set (re-imports as reps/distance/time-scored)`,
-          );
-        }
-
+        const cells = workUnitToRow(wu, omit);
+        if (cells === undefined) continue;
         setOrder++;
         rows.push([
           date,
@@ -379,13 +409,13 @@ export function mapOpenBodyToStrong(records: OpenBodyRecord[], opts: ToStrongOpt
           String(duration),
           name,
           String(setOrder),
-          weight ?? "0",
-          reps ?? "0",
-          dist.out ?? "0",
-          secs.out ?? "0",
-          wu.notes ?? "",
+          cells.weight,
+          cells.reps,
+          cells.distance,
+          cells.seconds,
+          cells.notes,
           String(workoutNo),
-          rpe ?? "",
+          cells.rpe,
         ]);
       }
     }
