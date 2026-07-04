@@ -20,12 +20,12 @@ jobs:
         node-version: ["20.19", "22", "24"]
     steps:
       - name: Checkout openbody-ts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: openbody-ts
 
       - name: Checkout openbody (the standard — schema + vectors)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: openbody/openbody
           path: openbody
@@ -36,7 +36,7 @@ jobs:
           ref: main
 
       - name: Checkout openbody-registry (exercise-name crosswalk data)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: openbody/openbody-registry
           path: openbody-registry

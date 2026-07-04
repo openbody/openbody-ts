@@ -21,7 +21,7 @@ jobs:
     env:
       HUSKY: "0" # the changesets action makes a git commit — don't fire local hooks in CI
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
