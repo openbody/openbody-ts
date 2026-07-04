@@ -18,7 +18,12 @@ permissions:
 
 jobs:
   changeset:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changeset') }}
+    # Only nudge real human contributor PRs. Auto-exempt: the `skip-changeset` label, the
+    # Changesets version PR (which deletes changesets by design), and dependabot dep bumps.
+    if: >-
+      !contains(github.event.pull_request.labels.*.name, 'skip-changeset') &&
+      github.actor != 'dependabot[bot]' &&
+      !startsWith(github.head_ref, 'changeset-release/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
