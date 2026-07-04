@@ -162,7 +162,14 @@ export function parseLossless(text: string): unknown {
       skipWs();
       if (text[i] !== ":") fail("expected ':'");
       i++;
-      obj[key] = parseValue();
+      const value = parseValue();
+      // Define the key as an own data property rather than `obj[key] = value`: a bare
+      // assignment to the key "__proto__" would hit Object.prototype's `__proto__` setter,
+      // silently dropping the payload AND mutating the object's prototype (a divergence
+      // from JSON.parse, and a prototype-pollution vector on untrusted input). JSON.parse
+      // creates a normal own "__proto__" property; defineProperty matches that. Duplicate
+      // keys stay last-wins (like JSON.parse) — a repeated key just redefines the property.
+      Object.defineProperty(obj, key, { value, writable: true, enumerable: true, configurable: true });
       skipWs();
       const c = text[i];
       if (c === ",") {

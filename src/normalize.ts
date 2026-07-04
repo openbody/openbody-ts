@@ -75,6 +75,29 @@ function expandMetric(field: string, v: unknown): unknown {
   return v;
 }
 
+// Fold a scalar-or-Target `value` in place against its sibling `unit`, on a container
+// (a Load, or one Intensity entry) whose value/unit shapes are identical (§5.12 Load.unit
+// / §5.13 Intensity.unit — each has one canonical home for the unit). A bare scalar wraps
+// to `{absolute:{value}}`; otherwise the unit nested in whichever Target variant is present
+// (absolute/range/ramp) moves up to the sibling `unit` — the outer `unit` wins if already
+// set, and a `ramp`'s directional `from`/`to` are never touched (§5.10). `zone`/no-value
+// entries and the threshold-relative variants have no inner unit and are left as-is.
+function foldTargetUnit(container: Rec): void {
+  if (isScalarNumber(container.value)) {
+    container.value = { absolute: { value: container.value } };
+    return;
+  }
+  const v = container.value;
+  if (!v || typeof v !== "object") return;
+  for (const variant of ["absolute", "range", "ramp"] as const) {
+    const t = v[variant];
+    if (!t) continue;
+    if (t.unit !== undefined && container.unit === undefined) container.unit = t.unit;
+    delete t.unit;
+    return;
+  }
+}
+
 function transformMetricsObj(obj: Rec | undefined): void {
   if (!obj) return;
   for (const f of PRESCRIPTION_METRICS) if (f in obj) obj[f] = expandMetric(f, obj[f]);
@@ -83,43 +106,11 @@ function transformMetricsObj(obj: Rec | undefined): void {
   if (obj.sides && typeof obj.sides === "object" && "restBetween" in obj.sides) {
     obj.sides.restBetween = expandMetric("rest", obj.sides.restBetween);
   }
-  if (obj.load && typeof obj.load === "object") {
-    const load = obj.load;
-    if (isScalarNumber(load.value)) {
-      load.value = { absolute: { value: load.value } };
-    } else if (load.value?.absolute) {
-      if (load.value.absolute.unit !== undefined && load.unit === undefined) load.unit = load.value.absolute.unit;
-      delete load.value.absolute.unit;
-    } else if (load.value?.range) {
-      if (load.value.range.unit !== undefined && load.unit === undefined) load.unit = load.value.range.unit;
-      delete load.value.range.unit;
-    } else if (load.value?.ramp) {
-      // Fold `ramp.unit` to the sibling `Load.unit`, mirroring the `absolute` case above —
-      // `from`/`to` themselves are never touched (§5.10, order-significant).
-      if (load.value.ramp.unit !== undefined && load.unit === undefined) load.unit = load.value.ramp.unit;
-      delete load.value.ramp.unit;
-    }
-  }
-  // Intensity entries carry a scalar-or-Target `value` with the unit on the sibling
-  // (like Load); `zone` entries have no value. Mirror the Load expansion.
+  if (obj.load && typeof obj.load === "object") foldTargetUnit(obj.load);
+  // Intensity entries carry a scalar-or-Target `value` with the unit on the sibling,
+  // exactly like Load; `zone` entries have no value (foldTargetUnit leaves them alone).
   if (Array.isArray(obj.intensity)) {
-    for (const it of obj.intensity) {
-      if (!it || typeof it !== "object") continue;
-      if (isScalarNumber(it.value)) {
-        it.value = { absolute: { value: it.value } };
-      } else if (it.value?.absolute) {
-        if (it.value.absolute.unit !== undefined && it.unit === undefined) it.unit = it.value.absolute.unit;
-        delete it.value.absolute.unit;
-      } else if (it.value?.range) {
-        if (it.value.range.unit !== undefined && it.unit === undefined) it.unit = it.value.range.unit;
-        delete it.value.range.unit;
-      } else if (it.value?.ramp) {
-        // Fold `ramp.unit` to the sibling `Intensity.unit`, mirroring absolute/range —
-        // `from`/`to` are directional (§5.10) and are never reordered/touched here.
-        if (it.value.ramp.unit !== undefined && it.unit === undefined) it.unit = it.value.ramp.unit;
-        delete it.value.ramp.unit;
-      }
-    }
+    for (const it of obj.intensity) if (it && typeof it === "object") foldTargetUnit(it);
   }
   // effortLoad values are plain numbers — number canon (deepCanon) handles them.
 }
@@ -181,6 +172,10 @@ function expandRoundScheme(block: Rec): void {
   const rs = block.roundScheme;
   if (rs === undefined) return;
   const where = block.id ?? "?";
+  // On the lossless-parse-without-validate path a malformed roundScheme reaches here
+  // untyped; guard the shape so it surfaces as a NormalizeError (the module's contract,
+  // src/errors.ts) rather than a raw `rs.forEach is not a function` TypeError below.
+  if (!Array.isArray(rs)) throw new NormalizeError(`Block ${where}: roundScheme must be an array (§5.4)`);
   if (block.repetitions !== undefined)
     throw new NormalizeError(`Block ${where}: roundScheme+repetitions is invalid (§5.4)`);
   if (block.performance !== undefined)

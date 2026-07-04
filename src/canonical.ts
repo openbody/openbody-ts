@@ -92,7 +92,12 @@ export function isFixedPointLike(v: unknown): boolean {
 /** Step 1 (timestamps): canonical RFC 3339 spelling (EQUIVALENCE.md step 1). */
 export function canonTimestamp(s: string): string {
   let t = s.trim().toUpperCase();
-  // zero offset -> Z
+  // Any zero UTC offset -> Z (EQUIVALENCE.md step 1: "a zero UTC offset written Z").
+  // Deliberately folds BOTH +00:00 and -00:00: the spec keys the rule on the offset's
+  // numeric value (zero), and a non-zero offset is what it preserves as "a real,
+  // preserved difference". RFC 3339 §4.3's distinct "-00:00 = unknown local offset"
+  // reading is not carried through the equivalence method — if the standard later
+  // wants -00:00 preserved, this line and the EQUIVALENCE.md rule change together.
   t = t.replace(/[+-]00:00$/, "Z");
   // strip trailing-zero fractional seconds (and a bare dot)
   t = t.replace(/(\.\d*?)0+(?=Z|[+-]\d\d:\d\d|$)/, "$1").replace(/\.(?=Z|[+-]\d\d:\d\d|$)/, "");
