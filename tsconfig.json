@@ -11,6 +11,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    // Pin the ambient @types included so the node globals (node:fs/path/url, process) are
+    // present even for the build's narrow `include: ["src"]`. TypeScript 6 no longer
+    // auto-includes @types/node in that case the way 5.x did; without this the emit build
+    // (tsconfig.build.json) fails on the two node-only modules while `--noEmit` still passes.
+    "types": ["node"],
     "noEmit": true
   },
   "include": ["src", "scripts", "test", "vitest.config.ts"]
