@@ -43,6 +43,25 @@
           }
         }
       }
+    },
+    {
+      // Encode the function-size bar so a monster like the pre-refactor 370-line
+      // mapFitbitTakeout can't recur. The ceiling sits above the largest deliberately-
+      // linear mapping function (tcx ~139 body lines, parseLossless ~135) with headroom,
+      // so it flags genuine regressions rather than nagging the existing top-to-bottom
+      // mappers. Scoped to src/: test describe/it blocks and the scripts/ tooling are
+      // legitimately long and are not held to this bar.
+      "includes": ["src/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": { "maxLines": 160, "skipBlankLines": true }
+            }
+          }
+        }
+      }
     }
   ]
 }
