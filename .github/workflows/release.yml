@@ -18,6 +18,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      HUSKY: "0" # the changesets action makes a git commit — don't fire local hooks in CI
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +31,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Open or update the Version Packages PR
         uses: changesets/action@v1
+        # The ORG currently disallows Actions-created PRs (Org Settings → Actions → General →
+        # "Allow GitHub Actions to create and approve pull requests"). Until that's enabled, the
+        # action still bumps + pushes the `changeset-release/main` branch but can't open the PR —
+        # tolerate that here so the run stays green instead of red-on-every-push. Once the org
+        # setting is on, this `continue-on-error` can be dropped.
+        continue-on-error: true
         with:
           version: npm run version-packages
           commit: "chore(release): version packages"
