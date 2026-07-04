@@ -11,7 +11,7 @@ import type {
   Session,
   WorkUnit,
 } from "../types.js";
-import { contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { addSeconds, contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
 import { subjectFor } from "./shared.js";
 
 /**
@@ -25,7 +25,8 @@ import { subjectFor } from "./shared.js";
  * `opts.utcOffset` stamps Strong's offset-less `"2026-03-02 06:45:00"`-style
  * timestamps (default `"Z"`).
  *
- * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `unparseable-date` (a row's `Date` cell is blank/garbled, so `endTime` is omitted).
  */
 export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
@@ -49,10 +50,15 @@ export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
     const f = wrows[0];
     if (f === undefined) continue; // unreachable: groups are created non-empty
     const start = toRfc3339(f.Date ?? "", off);
-    // Wall-clock + Duration arithmetic on a fixed UTC anchor (a constant offset cancels in
-    // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
-    const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
-    const end = new Date(Date.parse(`${wall}Z`) + Number(f.Duration || 0) * 1000).toISOString().slice(0, 19) + off;
+    // start + Duration = end (see csv.addSeconds); undefined when the Date cell is blank/
+    // unparseable — degrade by omitting endTime + warning (never throw, src/errors.ts).
+    const end = addSeconds(start, Number(f.Duration || 0), off);
+    if (end === undefined)
+      warnings.push({
+        code: "unparseable-date",
+        message: `workout "${key}" has a blank or unparseable Date ("${f.Date ?? ""}") — endTime omitted`,
+        context: { mapper: "strong", clientRecordId: key, date: f.Date ?? "" },
+      });
     const session: Session = {
       // The export has no workout id of its own, so the natural key (Date|Workout Name) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering
@@ -63,7 +69,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
       clientRecordId: key,
       disciplines: ["strength"],
       startTime: start,
-      endTime: end,
+      ...(end !== undefined ? { endTime: end } : {}),
       name: f["Workout Name"],
       extension: { "io.strong.export": { workoutNo: f["Workout No"] } },
       exercises: [] as Exercise[],

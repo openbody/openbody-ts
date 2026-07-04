@@ -46,7 +46,12 @@ export function* els(xml: string, tag: string): Generator<El> {
   for (const m of xml.matchAll(elRe(tag)))
     yield {
       attrs: Object.fromEntries(
-        [...(m[1] ?? "").matchAll(/([\w:.-]+)="([^"]*)"/g)].map((a) => [a[1], decodeEntities(a[2] ?? "")]),
+        // XML 1.0 permits either quote style (lat="47.6" or lat='47.6'); accept both and
+        // take whichever group matched, else a single-quoted GPX/TCX yields NaN lat/lon.
+        [...(m[1] ?? "").matchAll(/([\w:.-]+)=(?:"([^"]*)"|'([^']*)')/g)].map((a) => [
+          a[1],
+          decodeEntities(a[2] ?? a[3] ?? ""),
+        ]),
       ),
       inner: m[2] ?? "",
     };

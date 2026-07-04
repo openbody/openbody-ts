@@ -93,13 +93,20 @@ export function mapAppleHealth(xml: string, opts: MapOptions = {}): MapperResult
         skip("Record", i, missing);
         continue;
       }
+      // `missingOf` only rejects absent/blank `value`; a present-but-non-numeric one
+      // (value="abc") would still land NaN in `quantity` — skip it (csv.ts num() discipline).
+      const quantity = Number(a.value);
+      if (!Number.isFinite(quantity)) {
+        skip("Record", i, ["value"]);
+        continue;
+      }
       const id = `apple-q-${i}`;
       records.push({
         id,
         recordType: "Measurement",
         subject,
         type: qtyFor(a.type),
-        quantity: Number(a.value),
+        quantity,
         unit: UNIT[a.unit ?? ""] ?? a.unit,
         startTime: rfc(a.startDate ?? ""),
         endTime: rfc(a.endDate ?? ""),

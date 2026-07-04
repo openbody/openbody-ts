@@ -68,6 +68,22 @@ export const num = (s: string | undefined): number | undefined => {
   return Number.isFinite(n) ? n : undefined; // a malformed cell must not put NaN on the wire
 };
 
+/**
+ * "start + duration = end" for the CSV mappers (Strong/Concept2): strip `start`'s offset,
+ * add `seconds` on a fixed UTC anchor (a constant offset cancels in the difference,
+ * fitbit.ts precedent), and re-stamp `offset` so the end carries the same offset as the
+ * start. Returns undefined when `start` is unparseable (a blank/garbled Date cell) or
+ * `seconds` is non-finite — the caller then omits endTime and warns, rather than calling
+ * `new Date(NaN).toISOString()`, which throws `RangeError: Invalid time value` (per
+ * src/errors.ts a bad OPTIONAL cell degrades on the warnings channel, it never throws).
+ */
+export function addSeconds(start: string, seconds: number, offset = "Z"): string | undefined {
+  const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
+  const ms = Date.parse(`${wall}Z`);
+  if (!Number.isFinite(ms) || !Number.isFinite(seconds)) return undefined;
+  return new Date(ms + seconds * 1000).toISOString().slice(0, 19) + offset;
+}
+
 /** Short stable content hash (FNV-1a 32-bit, hex) for ids derived from record content —
  * positional numbering would shift on re-export, defeating §7.1 dedup. */
 export function contentHash(s: string): string {

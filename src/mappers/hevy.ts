@@ -46,7 +46,10 @@ export function mapHevy(csv: string, opts: MapOptions = {}): MapperResult {
   for (const [key, srows] of sessions) {
     const f = srows[0];
     if (f === undefined) continue; // unreachable: groups are created non-empty
-    const hasSuperset = srows.some((r) => r.superset_id !== "");
+    // `superset_id` is an optional column: when absent, every row's value is undefined,
+    // which `!== ""` would wrongly read as "has a superset" (forcing bogus colliding
+    // `-ssundefined` Blocks). Truthiness gates it correctly — absent/blank ⇒ no supersets.
+    const hasSuperset = srows.some((r) => r.superset_id);
     const session: Session = {
       // The export has no workout id of its own, so the natural key (title|start_time) is
       // the client identifier (§7.1) and a hash of it the stable id — positional numbering

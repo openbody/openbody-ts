@@ -329,7 +329,10 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
     } else if (/^steps-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
       for (const x of parseArray(f)) {
         const iso = usToIso(String(x.dateTime ?? ""));
-        if (iso && x.value != null) intraday.steps.push({ e: epoch(iso), iso, v: Number(x.value) });
+        // value must parse to a finite number — a non-numeric cell would otherwise land NaN
+        // in the day's dataPoints (csv.ts num() discipline); null stays a skip as before.
+        const v = Number(x.value);
+        if (iso && x.value != null && Number.isFinite(v)) intraday.steps.push({ e: epoch(iso), iso, v });
         else skipEntry();
       }
     } else if (/^heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {

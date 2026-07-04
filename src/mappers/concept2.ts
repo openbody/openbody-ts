@@ -64,7 +64,7 @@ import type {
   Session,
   WorkUnit,
 } from "../types.js";
-import { num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { addSeconds, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
 import { subjectFor } from "./shared.js";
 
 /** "21:31.9" / "3:00" / "1:00:00" → seconds (undefined for blank/unparseable). */
@@ -156,7 +156,8 @@ function inferPiece(
  * `opts.utcOffset` stamps the CSV's offset-less local-wall-clock `Date` column
  * (default `"Z"`).
  *
- * Warnings this mapper can emit: `default-subject` (no `opts.subject` given).
+ * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
+ * `unparseable-date` (a row's `Date` cell is blank/garbled, so `endTime` is omitted).
  */
 export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
   const warnings: MapWarning[] = [];
@@ -188,11 +189,16 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
 
     const start = toRfc3339(r["Date"] ?? "", opts.utcOffset); // Date is offset-less local wall-clock
     const elapsed = (workSec ?? 0) + (restSec ?? 0);
-    // Wall-clock + elapsed arithmetic on a fixed UTC anchor (a constant offset cancels in
-    // the difference, fitbit.ts precedent), so the end carries the same offset as the start.
     const off = opts.utcOffset ?? "Z";
-    const wall = start.replace(/(?:Z|[+-]\d\d:\d\d)$/, "");
-    const end = new Date(Date.parse(`${wall}Z`) + Math.round(elapsed) * 1000).toISOString().slice(0, 19) + off;
+    // start + elapsed = end (see csv.addSeconds); undefined when the Date cell is blank/
+    // unparseable — degrade by omitting endTime + warning (never throw, src/errors.ts).
+    const end = addSeconds(start, Math.round(elapsed), off);
+    if (end === undefined)
+      warnings.push({
+        code: "unparseable-date",
+        message: `row "${logId}" has a blank or unparseable Date ("${r["Date"] ?? ""}") — endTime omitted`,
+        context: { mapper: "concept2", clientRecordId: logId, date: r["Date"] ?? "" },
+      });
     const prov: Provenance = {
       method: "sensor",
       sourceApp: "concept2",
@@ -234,7 +240,7 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
       disciplines: [machine.discipline],
       intent: "train",
       startTime: start,
-      endTime: end,
+      ...(end !== undefined ? { endTime: end } : {}),
       provenance: prov,
     };
 
@@ -288,7 +294,7 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
         quantity: avgHr,
         unit: "/min",
         startTime: start,
-        endTime: end,
+        ...(end !== undefined ? { endTime: end } : {}),
         provenance: prov,
       });
       session.links = [{ type: "measuredBy", ref: `${sid}-hr` }];

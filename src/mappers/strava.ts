@@ -1,7 +1,16 @@
 // Strava activity + streams → OpenBody Pillar A Measurements (sampleArray) + a Pillar B
 // Session linked by measuredBy. Input is the documented activity+streams wire shape.
 import { MapperInputError } from "../errors.js";
-import type { Link, LiveRecord, MapOptions, MapperResult, MapWarning, Provenance, WireRecord } from "../types.js";
+import type {
+  Link,
+  LiveRecord,
+  MapOptions,
+  MapperResult,
+  MapWarning,
+  Performance,
+  Provenance,
+  WireRecord,
+} from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, subjectFor } from "./shared.js";
 
 /** The documented Strava API activity+streams wire shape (input side — WireRecord-loose, not OpenBody records). */
@@ -106,10 +115,14 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): MapperResu
   if (s.cadence) scalarStream(`strava-${a.id}-cadence`, "cadence", "/min", s.cadence.data);
   if (s.latlng) {
     const id = `strava-${a.id}-route`;
-    const dataPoints = s.latlng.data.map((ll: number[], i: number) => [
-      ll[0],
-      ll[1],
-      s.altitude ? s.altitude.data[i] : null,
+    // §4.3 dataPoints are null-padded, never dropped (shared.ts contract): a null/short
+    // `ll` fix maps to [null, null], and a missing/short altitude stream pads null (never
+    // undefined, never a throw). `?? null` preserves a literal 0 lat/lon (equator/meridian).
+    const alt = s.altitude?.data;
+    const dataPoints = s.latlng.data.map((ll: number[] | null, i: number) => [
+      ll?.[0] ?? null,
+      ll?.[1] ?? null,
+      alt?.[i] ?? null,
     ]);
     records.push({
       id,
@@ -153,6 +166,13 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): MapperResu
   if (a.average_heartrate != null) aggregate(`strava-${a.id}-hr-mean`, "heart_rate_mean", a.average_heartrate, "/min");
   if (a.max_heartrate != null) aggregate(`strava-${a.id}-hr-max`, "heart_rate_max", a.max_heartrate, "/min");
 
+  // Guard the summary metrics like everything above (and csv.ts num()): emit distance/time
+  // only when finite (0 is a valid Strava value) — a missing/non-numeric field must never
+  // land NaN or undefined in absolute.value on the wire.
+  const wuPerf: Performance = {};
+  if (Number.isFinite(a.distance)) wuPerf.distance = { absolute: { value: a.distance, unit: "m" } };
+  if (Number.isFinite(a.moving_time)) wuPerf.time = { absolute: { value: a.moving_time, unit: "s" } };
+
   records.push({
     id: `strava-${a.id}`,
     recordType: "Session",
@@ -170,10 +190,7 @@ export function mapStrava(input: StravaInput, opts: MapOptions = {}): MapperResu
         id: `strava-${a.id}-wu`,
         recordType: "WorkUnit",
         scoring: "continuous",
-        performance: {
-          distance: { absolute: { value: a.distance, unit: "m" } },
-          time: { absolute: { value: a.moving_time, unit: "s" } },
-        },
+        performance: wuPerf,
         links: measuredBy,
       },
     ],
