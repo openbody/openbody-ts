@@ -83,6 +83,28 @@ describe("parseLossless rejects unescaped control characters in strings (RFC 825
   });
 });
 
+// Regression: a "__proto__" key must become an OWN enumerable property (like JSON.parse),
+// never hit Object.prototype's setter — that would drop the payload AND pollute the
+// prototype. defineProperty in parse.ts guards it; this pins the JSON.parse-parity contract.
+describe("parseLossless handles __proto__ as an own key (no prototype pollution)", () => {
+  it("makes __proto__ an own enumerable property and leaves the prototype clean", () => {
+    const r = parseLossless('{"a":1,"__proto__":{"x":2}}') as WireRecord;
+    expect(Object.keys(r)).toContain("__proto__"); // enumerable own key
+    expect(Object.hasOwn(r, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(r), "prototype must be untouched — no pollution").toBe(Object.prototype);
+    // Parity: JSON.parse also creates an own "__proto__" data property.
+    expect(Object.keys(JSON.parse('{"a":1,"__proto__":{"x":2}}'))).toEqual(Object.keys(r));
+  });
+  it("preserves a scalar __proto__ value rather than dropping it", () => {
+    const r = parseLossless('{"__proto__":5}') as WireRecord;
+    expect(Object.keys(r)).toEqual(["__proto__"]);
+    // Read the OWN data property (not the inherited accessor) to prove the payload survived.
+    const own = Object.getOwnPropertyDescriptor(r, "__proto__")?.value as LosslessNumber;
+    expect(own.value).toBe("5"); // preserved verbatim as a LosslessNumber
+    expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
+  });
+});
+
 describe("parseLossless rejects malformed JSON", () => {
   const bad = [
     ["", "empty input"],

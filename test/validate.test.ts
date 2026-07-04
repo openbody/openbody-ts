@@ -62,6 +62,21 @@ describe("checkLoadUnit (§5.12 Load.unit conditional)", () => {
     expect(v.valid).toBe(false);
     expect(v.errors).toContain('Load.unit MUST be omitted when value is "stopCondition" (§5.12)');
   });
+
+  // §5.12 leaves `ramp` deliberately unconstrained (SPEC.md is silent) — Load.unit is neither
+  // required (unlike scalar/absolute) nor forbidden (unlike relativeToThreshold). Pin both.
+  it("ramp load WITH a sibling Load.unit → valid (unit permitted)", () => {
+    const v = validate(
+      workUnit({ prescription: { reps: 5, load: { value: { ramp: { from: 100, to: 120 } }, unit: "kg" } } }),
+    );
+    expect(v.errors).toBeNull();
+    expect(v.valid).toBe(true);
+  });
+  it("ramp load WITHOUT any unit → valid (unit not required)", () => {
+    const v = validate(workUnit({ prescription: { reps: 5, load: { value: { ramp: { from: 100, to: 120 } } } } }));
+    expect(v.errors).toBeNull();
+    expect(v.valid).toBe(true);
+  });
 });
 
 describe("checkScoringMetric (§5.5 scoring ↔ metric agreement)", () => {

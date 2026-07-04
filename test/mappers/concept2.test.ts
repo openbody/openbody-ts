@@ -149,5 +149,22 @@ describe("mapConcept2", () => {
       expect(mapConcept2(csv).warnings.map((w) => w.code)).toEqual(["default-subject"]);
       expect(mapConcept2(csv, { subject: "me" }).warnings).toEqual([]);
     });
+
+    // Regression (RangeError fix, src/errors.ts): a blank/unparseable Date cell must degrade —
+    // unparseable-date warning + omitted endTime — never throw new Date(NaN).toISOString().
+    it("degrades a blank Date row: unparseable-date warning + omitted endTime; valid rows keep endTime", () => {
+      const csv = [
+        '"Log ID",Date,Description,"Work Distance","Work Time (Seconds)",Type',
+        "1,,2000m row,2000,465.3,RowErg",
+        "2,2026-03-02 06:45:00,2000m row,2000,465.3,RowErg",
+      ].join("\n");
+      const out = mapConcept2(csv, { subject: "me" });
+      expect(out.warnings.map((w) => w.code)).toContain("unparseable-date");
+      const bad = ofKind(out.records, "Session").find((s) => s.clientRecordId === "1");
+      expect(bad && "endTime" in bad, "blank-Date row omits endTime").toBe(false);
+      const good = ofKind(out.records, "Session").find((s) => s.clientRecordId === "2");
+      expect(good?.startTime).toBe("2026-03-02T06:45:00Z");
+      expect(good?.endTime, "start + work+rest = end (465.3s ≈ 7:45)").toBe("2026-03-02T06:52:45Z");
+    });
   });
 });

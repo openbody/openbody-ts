@@ -45,6 +45,16 @@ describe("error hierarchy (WP7)", () => {
     expect((e as NormalizeError).message).toMatch(/roundScheme\+repetitions/);
   });
 
+  // Regression: a non-array roundScheme reaching the un-validated lossless path must surface
+  // as the module's NormalizeError, not a raw `rs.forEach is not a function` TypeError (§5.4).
+  it("NormalizeError from normalizeDocument: a non-array roundScheme (§5.4)", () => {
+    const e = caught(() => normalizeDocument({ id: "b1", recordType: "Block", roundScheme: 3, children: [] }));
+    expect(e).toBeInstanceOf(NormalizeError);
+    expect(e).not.toBeInstanceOf(TypeError);
+    expect((e as NormalizeError).code).toBe("normalize");
+    expect((e as NormalizeError).message).toMatch(/roundScheme must be an array/);
+  });
+
   it("NormalizeError from normalizeDocument: sets+performance is invalid (§5.5)", () => {
     const doc = {
       id: "w1",

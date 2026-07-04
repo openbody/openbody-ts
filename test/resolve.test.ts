@@ -78,6 +78,36 @@ describe("rung 4: opaque fallback", () => {
   });
 });
 
+// The AMBIGUOUS rung (§6.5): a normalized key claimed by two DIFFERENT canonical ids never
+// matches — resolution falls through to opaque, deterministically, regardless of table order.
+// "Seated Calf Raise" is a real collision in the vendored crosswalk (machine vs barbell).
+describe("rung 3: an ambiguous normalized key never matches (falls through to opaque)", () => {
+  const xwalk = JSON.parse(fs.readFileSync(path.join(repoRoot, "vendor/crosswalk.json"), "utf8")) as {
+    registry: { id: string }[];
+  };
+  const ids = new Set(xwalk.registry.map((e) => e.id));
+
+  it('"Seated Calf Raise" is genuinely ambiguous (two registry ids) yet resolves opaque-only without a source', () => {
+    // Precondition: both colliding ids really are in the registry — so this is ambiguity, not absence.
+    expect(ids.has("calf-raise.seated.machine")).toBe(true);
+    expect(ids.has("calf-raise.seated.barbell")).toBe(true);
+    // No source ⇒ rung 1 is skipped; the shared normalized key is AMBIGUOUS ⇒ opaque-only.
+    expect(resolveExerciseRef("Seated Calf Raise")).toEqual({ opaque: "Seated Calf Raise" });
+  });
+
+  it("a curated per-app alias (rung 1) still overrides the ambiguity", () => {
+    expect(resolveExerciseRef("Seated Calf Raise", { source: "hevy" })).toEqual({
+      id: "calf-raise.seated.machine",
+      opaque: "Seated Calf Raise",
+    });
+  });
+});
+
+// The rung-3 `id === name` branch (opaque omitted → `{ id }`) is shadowed by rung-2 canonical-id
+// passthrough: every id the normalized index can return is a registry id, so any input equal to
+// it is caught by rung 2 first. Rung 2 already pins that opaque-omitted `{ id }` shape below,
+// so the observable contract is covered even though the rung-3 branch is unreachable via the API.
+
 describe("every ExerciseRef shape the resolver emits validates against the schema", () => {
   const exercise = (ref: unknown) => ({
     id: "ex-1",

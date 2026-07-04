@@ -51,6 +51,33 @@ describe("mapStrava", () => {
     expectAllValid(noHr);
   });
 
+  // Regression (§4.3 null-pad contract): the location route null-pads a short altitude
+  // stream (pushes null, never undefined) and survives a null latlng fix; summary metrics
+  // are omitted (not NaN) when the activity lacks them.
+  it("null-pads a short altitude stream and a null latlng fix; omits absent distance/time", () => {
+    const input = {
+      activity: { id: 42, start_date: "2026-01-01T00:00:00Z", elapsed_time: 20, sport_type: "Run" },
+      streams: {
+        time: { data: [0, 10, 20] },
+        latlng: { data: [[1, 2], null, [5, 6]] },
+        altitude: { data: [100, 110] },
+      },
+    };
+    const out = mapStrava(input, { subject: "me" }).records;
+    expectAllValid(out);
+    const route = ofKind(out, "Measurement").find((r) => r.type === "location");
+    expect(route?.sampleArray?.dataPoints).toEqual([
+      [1, 2, 100],
+      [null, null, 110], // null latlng → [null, null, alt]
+      [5, 6, null], // altitude stream ran out → padded null, NOT undefined
+    ]);
+    const thirdAlt = (route?.sampleArray?.dataPoints?.[2] as (number | null)[])[2];
+    expect(thirdAlt, "short altitude stream must pad null, not undefined").toBeNull();
+    const wu = ofKind(out, "Session")[0]?.workUnits?.[0];
+    expect(wu?.performance?.distance, "absent distance omitted, never NaN").toBeUndefined();
+    expect(wu?.performance?.time, "absent moving_time omitted, never NaN").toBeUndefined();
+  });
+
   it("throws MapperInputError (clear message) when the time stream is missing", () => {
     const input = sample();
     expect(() => mapStrava({ activity: input.activity, streams: {} })).toThrow(MapperInputError);

@@ -48,6 +48,24 @@ describe("mapStrong", () => {
     expect(bench?.id).toBe("bench-press.barbell.flat");
   });
 
+  // Regression (RangeError fix, src/errors.ts): a blank/unparseable Date cell must degrade —
+  // emit an unparseable-date warning and omit endTime — never throw new Date(NaN).toISOString().
+  it("degrades a blank Date row: unparseable-date warning + omitted endTime; valid rows keep endTime", () => {
+    const csv = [
+      "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No",
+      ",Bad Day,3600,Squat (Barbell),1,100,5,0,0,,1",
+      "2025-12-20 18:00:00,Good Day,3600,Bench Press (Barbell),1,80,5,0,0,,2",
+    ].join("\n");
+    const out = mapStrong(csv, { subject: "me" });
+    expect(out.warnings.map((w) => w.code)).toContain("unparseable-date");
+    const bad = ofKind(out.records, "Session").find((s) => s.name === "Bad Day");
+    expect(bad, "the blank-Date workout is still emitted, just without endTime").toBeDefined();
+    expect(bad && "endTime" in bad).toBe(false);
+    const good = ofKind(out.records, "Session").find((s) => s.name === "Good Day");
+    expect(good?.startTime).toBe("2025-12-20T18:00:00Z");
+    expect(good?.endTime, "a valid row still gets start + Duration = end").toBe("2025-12-20T19:00:00Z");
+  });
+
   describe("errors + warnings (WP7 contract)", () => {
     it("empty input throws MapperInputError (no header — not a Strong export)", () => {
       expect(() => mapStrong("")).toThrow(MapperInputError);

@@ -76,4 +76,12 @@ describe("canonTimestamp (EQUIVALENCE.md step 1)", () => {
     expect(canonTimestamp("2026-01-01T10:00:00.000Z")).toBe("2026-01-01T10:00:00Z");
     expect(canonTimestamp("2026-01-01T10:00:00.120-07:00")).toBe("2026-01-01T10:00:00.12-07:00");
   });
+
+  // Deliberate decision (canonical.ts): the rule keys on the offset's numeric VALUE (zero),
+  // so BOTH +00:00 and -00:00 fold to Z — RFC 3339 §4.3's "-00:00 = unknown local offset"
+  // reading is intentionally not carried through the equivalence method.
+  it("folds both +00:00 and -00:00 to Z", () => {
+    expect(canonTimestamp("2026-01-01T10:00:00+00:00")).toBe("2026-01-01T10:00:00Z");
+    expect(canonTimestamp("2026-01-01T10:00:00-00:00")).toBe("2026-01-01T10:00:00Z");
+  });
 });

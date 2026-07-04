@@ -91,6 +91,24 @@ describe("mapGpx", () => {
     expect(session?.extension?.gpx?.creator, "attribute values decode too").toBe('Café "Runner"');
   });
 
+  // Regression (xml.ts fix): XML 1.0 permits single-quoted attributes — lat='47.6' must
+  // parse identically to lat="47.6", not yield NaN lat/lon.
+  it("parses single-quoted lat/lon attributes (not just double-quoted)", () => {
+    const xml =
+      "<gpx creator='RunKeeper'><trk><trkseg>" +
+      "<trkpt lat='47.6' lon='-122.3'><time>2026-01-01T00:00:00Z</time></trkpt>" +
+      "<trkpt lat='47.7' lon='-122.4'><time>2026-01-01T00:00:05Z</time></trkpt>" +
+      "</trkseg></trk></gpx>";
+    const out = mapGpx(xml, { subject: "me" }).records;
+    expectAllValid(out);
+    const route = ofKind(out, "Measurement").find((r) => r.id === "gpx-route");
+    expect(route?.sampleArray?.dataPoints).toEqual([
+      [47.6, -122.3, null],
+      [47.7, -122.4, null],
+    ]);
+    expect(out.find((r) => r.recordType === "Session")?.extension?.gpx?.creator).toBe("RunKeeper");
+  });
+
   describe("errors + warnings (WP7 contract)", () => {
     it("input without a <gpx> root throws MapperInputError", () => {
       expect(() => mapGpx("")).toThrow(MapperInputError);
