@@ -65,13 +65,13 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
     "@changesets/cli": "^2.31.0",
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.1.0",
     "@vitest/coverage-v8": "^4.1.9",
     "fast-check": "^4.8.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
-    "tsx": "^4.16.0",
-    "typescript": "^5.5.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
   "lint-staged": {
