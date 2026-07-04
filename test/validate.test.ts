@@ -134,13 +134,26 @@ describe("checkTombstone (§7.1/§7.5 strictly id/recordType/status)", () => {
       quantity: 80,
       unit: "kg",
     });
+    // Invalid either way: the schema's strict tombstone branch rejects the extra payload
+    // structurally, and against a schema lacking that routing the semantic checkTombstone
+    // catches it — so assert the contract (deleted + payload is invalid), not which layer fires.
     expect(v.valid).toBe(false);
-    expect(v.errors).toContain("carries fields beyond id/recordType/status");
+    expect(v.errors).toBeTruthy();
   });
   it("a strict tombstone → valid", () => {
     const v = validate({ id: "m-1", recordType: "Measurement", status: "deleted" });
     expect(v.errors).toBeNull();
     expect(v.valid).toBe(true);
+  });
+  // Regression (cross-repo, standard schema fix): the top-level oneOf once double-matched a
+  // stripped tombstone for the kinds whose live form needs only recordType (Session/Program/
+  // Block) and wrongly REJECTED them. Deletions now route to the dedicated tombstone branch,
+  // so every addressable kind tombstones (§7.1/§7.5). Guards the re-synced vendored schema.
+  it("tombstones validate for Session/Program/Block (the kinds the oneOf once rejected)", () => {
+    for (const recordType of ["Session", "Program", "Block"] as const) {
+      const v = validate({ id: "t-1", recordType, status: "deleted" });
+      expect(v.valid, `${recordType} tombstone must validate`).toBe(true);
+    }
   });
 });
 
