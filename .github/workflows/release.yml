@@ -1,0 +1,43 @@
+name: release
+
+# Maintains a single "Version Packages" PR: when changesets land on main, this opens/updates
+# one PR that bumps the version + regenerates CHANGELOG.md and deletes the consumed changesets.
+# Merging that PR is how a release is cut. It does NOT touch main directly, and it does NOT
+# publish — so nothing unexpected ever ships. On a push with no pending changesets it's a no-op.
+on:
+  push:
+    branches: [main]
+
+# One release run at a time; a newer push supersedes an in-flight one.
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write # push the version-bump branch
+  pull-requests: write # open/update the Version Packages PR
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Open or update the Version Packages PR
+        uses: changesets/action@v1
+        with:
+          version: npm run version-packages
+          commit: "chore(release): version packages"
+          title: "chore(release): version packages"
+          # PUBLISH IS INTENTIONALLY DISABLED until this package goes public on npm.
+          # To turn it on later: add an `NPM_TOKEN` repo secret, then add this line —
+          #   publish: npm run release
+          # and export it below: `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}`.
+          # (`npm run release` → changeset publish → npm publish → prepack, which needs the
+          #  sibling openbody / openbody-registry checkouts + sync — mirror conformance.yml.)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

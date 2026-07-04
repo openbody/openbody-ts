@@ -1,0 +1,33 @@
+name: changeset-check
+
+# A gentle reminder, not a wall. Runs ONLY on PRs (direct pushes to main — the maintainer's
+# flow — are untouched). Fails when a PR changes the package but ships no changeset, so
+# user-facing changes don't slip into a release unlogged.
+#
+# Two ways it stays out of your way:
+#   1. Internal-only PRs (refactors, tests, docs, CI) — add the `skip-changeset` label and the
+#      job is skipped. No fake/empty changeset required.
+#   2. It is NOT a required check by default, so a red X here never blocks a merge. Make it
+#      required in branch-protection settings only if/when you want it to be a hard gate.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changeset:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changeset') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: A changeset is present (or add the 'skip-changeset' label)
+        run: npx changeset status --since=origin/${{ github.base_ref }}
