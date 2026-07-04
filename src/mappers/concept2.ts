@@ -53,6 +53,7 @@
 //     `exerciseRef.opaque` (§6.5 lossless floor).
 
 import type {
+  Block,
   ExerciseRefObject,
   Intensity,
   LiveRecord,
@@ -142,6 +143,162 @@ function inferPiece(
   return { kind: "single", scoring: "continuous" }; // a "just row" ends wherever it ends
 }
 
+/** Everything the per-row mapper shares for one `mapConcept2` call. */
+interface Concept2Ctx {
+  subject: string;
+  /** Raw opts.utcOffset — the "Z" default is applied by toRfc3339/addSeconds and locally. */
+  utcOffset: string | undefined;
+  warnings: MapWarning[];
+  records: LiveRecord[];
+}
+
+// Fixed intervals: the PM5 enforces the per-interval work value, so expanding the
+// Description into per-interval WorkUnits asserts only machine-guaranteed facts. Rest
+// follows every interval on a PM5 (total rest = n × rest), so each child gets it.
+function buildIntervalBlock(
+  sid: string,
+  exerciseRef: ExerciseRefObject,
+  piece: Extract<Piece, { kind: "intervals" }>,
+  childValue: number,
+  description: string,
+): Block {
+  const { childScoring, restSec: perIntervalRest } = piece;
+  const children = Array.from({ length: piece.n }, (_, j): WorkUnit => {
+    const perf: Performance =
+      childScoring === "distance"
+        ? { distance: { absolute: { value: childValue, unit: "m" } } }
+        : { time: { absolute: { value: childValue, unit: "s" } } };
+    if (perIntervalRest) perf.rest = { absolute: { value: perIntervalRest, unit: "s" } };
+    return { id: `${sid}-int${j + 1}`, recordType: "WorkUnit", exerciseRef, scoring: childScoring, performance: perf };
+  });
+  return { id: `${sid}-blk`, recordType: "Block", ...(description ? { name: description } : {}), children };
+}
+
+/** The single-piece (fixed-distance/fixed-time/continuous) WorkUnit for a workout row. */
+function buildSingleWorkUnit(
+  sid: string,
+  exerciseRef: ExerciseRefObject,
+  piece: Piece,
+  totals: { workDist?: number; workSec?: number; totalCal?: number; intensity: Intensity[] },
+): WorkUnit {
+  const { workDist, workSec, totalCal, intensity } = totals;
+  // A "single" piece always carries a scoring from inferPiece; "continuous" is the honest
+  // degradation for any shape that somehow reaches here without one.
+  const scoring = piece.kind === "single" ? piece.scoring : "continuous";
+  const perf: Performance = {};
+  // inferPiece invariant: it only returns "distance"/"time" scoring after matching the
+  // Description against that same defined work total, so these casts never see undefined.
+  if (scoring === "distance") perf.distance = { absolute: { value: workDist as number, unit: "m" } };
+  else if (scoring === "time") perf.time = { absolute: { value: workSec as number, unit: "s" } };
+  else {
+    if (workDist != null) perf.distance = { absolute: { value: workDist, unit: "m" } };
+    if (workSec != null) perf.time = { absolute: { value: workSec, unit: "s" } };
+    if (totalCal) perf.energy = { absolute: { value: totalCal, unit: "kcal" } };
+  }
+  if (intensity.length) perf.intensity = intensity;
+  return { id: `${sid}-wu`, recordType: "WorkUnit", exerciseRef, scoring, performance: perf };
+}
+
+/** Map one Concept2 season-CSV row to its Session (+ optional linked avg-HR Measurement). */
+function rowToRecords(row: Record<string, string>, index: number, ctx: Concept2Ctx): void {
+  const logId = row["Log ID"] || String(index + 1);
+  const sid = `c2-${logId}`;
+  const rawType = row["Type"] ?? "";
+  const machine = MACHINE[rawType.toLowerCase()] ?? { discipline: `concept2:${rawType.toLowerCase() || "unknown"}` };
+  const exerciseRef: ExerciseRefObject = machine.exerciseId
+    ? { id: machine.exerciseId, opaque: rawType }
+    : { opaque: rawType || "erg" };
+
+  const workSec = num(row["Work Time (Seconds)"]);
+  const workDist = num(row["Work Distance"]);
+  const restSec = num(row["Rest Time (Seconds)"]) ?? parseClock(row["Rest Time (Formatted)"]);
+  const restDist = num(row["Rest Distance"]);
+  const strokeRate = num(row["Stroke Rate/Cadence"]);
+  const avgWatts = num(row["Avg Watts"]);
+  const avgHr = num(row["Avg Heart Rate"]);
+  const totalCal = num(row["Total Cal"]);
+  const piece = inferPiece(row["Description"] ?? "", workSec, workDist, restSec);
+
+  const start = toRfc3339(row["Date"] ?? "", ctx.utcOffset); // Date is offset-less local wall-clock
+  const elapsed = (workSec ?? 0) + (restSec ?? 0);
+  const off = ctx.utcOffset ?? "Z";
+  // start + elapsed = end (see csv.addSeconds); undefined when the Date cell is blank/
+  // unparseable — degrade by omitting endTime + warning (never throw, src/errors.ts).
+  const end = addSeconds(start, Math.round(elapsed), off);
+  if (end === undefined)
+    ctx.warnings.push({
+      code: "unparseable-date",
+      message: `row "${logId}" has a blank or unparseable Date ("${row["Date"] ?? ""}") — endTime omitted`,
+      context: { mapper: "concept2", clientRecordId: logId, date: row["Date"] ?? "" },
+    });
+  const prov: Provenance = {
+    method: "sensor",
+    sourceApp: "concept2",
+    ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}),
+  };
+
+  // Whole-workout achieved intensity (§5.13) — only honest on a single piece (see header).
+  const intensity: Intensity[] = [];
+  if (piece.kind === "single") {
+    if (strokeRate) intensity.push({ dimension: "cadence", unit: "/min", value: { absolute: { value: strokeRate } } });
+    if (avgWatts) intensity.push({ dimension: "power", unit: "W", value: { absolute: { value: avgWatts } } });
+  }
+
+  // Residue (extension.concept2): every summary column that has no honest core home here.
+  const ext: Record<string, unknown> = {};
+  if (row["Pace"]) ext.pace = row["Pace"]; // /500m (RowErg/SkiErg) or /1000m (BikeErg)
+  if (num(row["Stroke Count"])) ext.strokeCount = num(row["Stroke Count"]);
+  if (num(row["Cal/Hour"])) ext.calHour = num(row["Cal/Hour"]);
+  if (num(row["Drag Factor"])) ext.dragFactor = num(row["Drag Factor"]);
+  if (piece.kind !== "single" && strokeRate) ext.avgStrokeRate = strokeRate; // workout average — see header
+  if (piece.kind !== "single" && avgWatts) ext.avgWatts = avgWatts;
+  if (restDist) ext.restDistance = restDist;
+  if (piece.kind === "variable" && restSec) ext.restTimeSeconds = restSec;
+  // `piece.scoring` exists only on single pieces (the Piece union above), matching the old
+  // optional-field reads: any non-single kind fell through these guards unchanged.
+  const singleScoring = piece.kind === "single" ? piece.scoring : undefined;
+  if (singleScoring === "distance" && workSec != null) ext.workTimeSeconds = workSec; // the piece's result time (§5.5 — see header)
+  if (singleScoring === "time" && workDist != null) ext.workDistance = workDist;
+  if (totalCal && singleScoring !== "continuous") ext.totalCal = totalCal;
+
+  const session: Session = {
+    id: sid,
+    recordType: "Session",
+    subject: ctx.subject,
+    clientRecordId: logId,
+    ...(row["Description"] ? { name: row["Description"] } : {}),
+    ...(row["Comments"] ? { notes: row["Comments"] } : {}),
+    disciplines: [machine.discipline],
+    intent: "train",
+    startTime: start,
+    ...(end !== undefined ? { endTime: end } : {}),
+    provenance: prov,
+  };
+
+  if (piece.kind === "intervals" && piece.n && piece.childValue != null) {
+    session.blocks = [buildIntervalBlock(sid, exerciseRef, piece, piece.childValue, row["Description"] ?? "")];
+  } else {
+    session.workUnits = [buildSingleWorkUnit(sid, exerciseRef, piece, { workDist, workSec, totalCal, intensity })];
+  }
+
+  if (avgHr) {
+    ctx.records.push({
+      id: `${sid}-hr`,
+      recordType: "Measurement",
+      subject: ctx.subject,
+      type: "heart_rate_mean",
+      quantity: avgHr,
+      unit: "/min",
+      startTime: start,
+      ...(end !== undefined ? { endTime: end } : {}),
+      provenance: prov,
+    });
+    session.links = [{ type: "measuredBy", ref: `${sid}-hr` }];
+  }
+  if (Object.keys(ext).length) session.extension = { concept2: ext };
+  ctx.records.push(session);
+}
+
 /**
  * Map a Concept2 Logbook season CSV export to OpenBody wire records: one Session per
  * row, its workout structure inferred from the PM5-generated `Description` (a single
@@ -168,139 +325,9 @@ export function mapConcept2(csv: string, opts: MapOptions = {}): MapperResult {
   requireColumns("concept2", header, ["Date"]);
   const records: LiveRecord[] = [];
 
-  rows.forEach((r, i) => {
-    const logId = r["Log ID"] || String(i + 1);
-    const sid = `c2-${logId}`;
-    const rawType = r["Type"] ?? "";
-    const machine = MACHINE[rawType.toLowerCase()] ?? { discipline: `concept2:${rawType.toLowerCase() || "unknown"}` };
-    const exerciseRef: ExerciseRefObject = machine.exerciseId
-      ? { id: machine.exerciseId, opaque: rawType }
-      : { opaque: rawType || "erg" };
-
-    const workSec = num(r["Work Time (Seconds)"]);
-    const workDist = num(r["Work Distance"]);
-    const restSec = num(r["Rest Time (Seconds)"]) ?? parseClock(r["Rest Time (Formatted)"]);
-    const restDist = num(r["Rest Distance"]);
-    const strokeRate = num(r["Stroke Rate/Cadence"]);
-    const avgWatts = num(r["Avg Watts"]);
-    const avgHr = num(r["Avg Heart Rate"]);
-    const totalCal = num(r["Total Cal"]);
-    const piece = inferPiece(r["Description"] ?? "", workSec, workDist, restSec);
-
-    const start = toRfc3339(r["Date"] ?? "", opts.utcOffset); // Date is offset-less local wall-clock
-    const elapsed = (workSec ?? 0) + (restSec ?? 0);
-    const off = opts.utcOffset ?? "Z";
-    // start + elapsed = end (see csv.addSeconds); undefined when the Date cell is blank/
-    // unparseable — degrade by omitting endTime + warning (never throw, src/errors.ts).
-    const end = addSeconds(start, Math.round(elapsed), off);
-    if (end === undefined)
-      warnings.push({
-        code: "unparseable-date",
-        message: `row "${logId}" has a blank or unparseable Date ("${r["Date"] ?? ""}") — endTime omitted`,
-        context: { mapper: "concept2", clientRecordId: logId, date: r["Date"] ?? "" },
-      });
-    const prov: Provenance = {
-      method: "sensor",
-      sourceApp: "concept2",
-      ...(rawType ? { device: { manufacturer: "concept2", model: rawType } } : {}),
-    };
-
-    // Whole-workout achieved intensity (§5.13) — only honest on a single piece (see header).
-    const intensity: Intensity[] = [];
-    if (piece.kind === "single") {
-      if (strokeRate)
-        intensity.push({ dimension: "cadence", unit: "/min", value: { absolute: { value: strokeRate } } });
-      if (avgWatts) intensity.push({ dimension: "power", unit: "W", value: { absolute: { value: avgWatts } } });
-    }
-
-    // Residue (extension.concept2): every summary column that has no honest core home here.
-    const ext: Record<string, unknown> = {};
-    if (r["Pace"]) ext.pace = r["Pace"]; // /500m (RowErg/SkiErg) or /1000m (BikeErg)
-    if (num(r["Stroke Count"])) ext.strokeCount = num(r["Stroke Count"]);
-    if (num(r["Cal/Hour"])) ext.calHour = num(r["Cal/Hour"]);
-    if (num(r["Drag Factor"])) ext.dragFactor = num(r["Drag Factor"]);
-    if (piece.kind !== "single" && strokeRate) ext.avgStrokeRate = strokeRate; // workout average — see header
-    if (piece.kind !== "single" && avgWatts) ext.avgWatts = avgWatts;
-    if (restDist) ext.restDistance = restDist;
-    if (piece.kind === "variable" && restSec) ext.restTimeSeconds = restSec;
-    // `piece.scoring` exists only on single pieces (the Piece union above), matching the old
-    // optional-field reads: any non-single kind fell through these guards unchanged.
-    const singleScoring = piece.kind === "single" ? piece.scoring : undefined;
-    if (singleScoring === "distance" && workSec != null) ext.workTimeSeconds = workSec; // the piece's result time (§5.5 — see header)
-    if (singleScoring === "time" && workDist != null) ext.workDistance = workDist;
-    if (totalCal && singleScoring !== "continuous") ext.totalCal = totalCal;
-
-    const session: Session = {
-      id: sid,
-      recordType: "Session",
-      subject,
-      clientRecordId: logId,
-      ...(r["Description"] ? { name: r["Description"] } : {}),
-      ...(r["Comments"] ? { notes: r["Comments"] } : {}),
-      disciplines: [machine.discipline],
-      intent: "train",
-      startTime: start,
-      ...(end !== undefined ? { endTime: end } : {}),
-      provenance: prov,
-    };
-
-    if (piece.kind === "intervals" && piece.n && piece.childValue != null) {
-      // Fixed intervals: the PM5 enforces the per-interval work value, so expanding the
-      // Description into per-interval WorkUnits asserts only machine-guaranteed facts.
-      // Rest follows every interval on a PM5 (total rest = n × rest), so each child gets it.
-      const { childScoring, restSec: perIntervalRest } = piece;
-      const childValue = piece.childValue; // the `!= null` guard above narrowed it to number
-      const children = Array.from({ length: piece.n }, (_, j): WorkUnit => {
-        const perf: Performance =
-          childScoring === "distance"
-            ? { distance: { absolute: { value: childValue, unit: "m" } } }
-            : { time: { absolute: { value: childValue, unit: "s" } } };
-        if (perIntervalRest) perf.rest = { absolute: { value: perIntervalRest, unit: "s" } };
-        return {
-          id: `${sid}-int${j + 1}`,
-          recordType: "WorkUnit",
-          exerciseRef,
-          scoring: childScoring,
-          performance: perf,
-        };
-      });
-      session.blocks = [
-        { id: `${sid}-blk`, recordType: "Block", ...(r["Description"] ? { name: r["Description"] } : {}), children },
-      ];
-    } else {
-      const perf: Performance = {};
-      // A "single" piece always carries a scoring from inferPiece; "continuous" is the
-      // honest degradation for any shape that somehow reaches here without one.
-      const scoring = piece.kind === "single" ? piece.scoring : "continuous";
-      // inferPiece invariant: it only returns "distance"/"time" scoring after matching the
-      // Description against that same defined work total, so these casts never see undefined.
-      if (scoring === "distance") perf.distance = { absolute: { value: workDist as number, unit: "m" } };
-      else if (scoring === "time") perf.time = { absolute: { value: workSec as number, unit: "s" } };
-      else {
-        if (workDist != null) perf.distance = { absolute: { value: workDist, unit: "m" } };
-        if (workSec != null) perf.time = { absolute: { value: workSec, unit: "s" } };
-        if (totalCal) perf.energy = { absolute: { value: totalCal, unit: "kcal" } };
-      }
-      if (intensity.length) perf.intensity = intensity;
-      session.workUnits = [{ id: `${sid}-wu`, recordType: "WorkUnit", exerciseRef, scoring, performance: perf }];
-    }
-
-    if (avgHr) {
-      records.push({
-        id: `${sid}-hr`,
-        recordType: "Measurement",
-        subject,
-        type: "heart_rate_mean",
-        quantity: avgHr,
-        unit: "/min",
-        startTime: start,
-        ...(end !== undefined ? { endTime: end } : {}),
-        provenance: prov,
-      });
-      session.links = [{ type: "measuredBy", ref: `${sid}-hr` }];
-    }
-    if (Object.keys(ext).length) session.extension = { concept2: ext };
-    records.push(session);
+  const ctx: Concept2Ctx = { subject, utcOffset: opts.utcOffset, warnings, records };
+  rows.forEach((row, i) => {
+    rowToRecords(row, i, ctx);
   });
 
   return { records, warnings };
