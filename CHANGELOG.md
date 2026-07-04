@@ -11,10 +11,6 @@
   documents differing only by such a key normalized as equivalent. All object rebuilds now
   define own properties (`Object.defineProperty`), matching `parseLossless`.
 
-This changelog is maintained with [Changesets](https://github.com/changesets/changesets).
-New entries are generated from the changesets in `.changeset/` when the version is bumped
-(`npm run version-packages`); do not edit released sections by hand.
-
 ## 0.1.0
 
 Initial release (pre-v1.0; tracks the current OpenBody draft — see the standard's
