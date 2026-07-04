@@ -43,6 +43,7 @@ import type {
   MapOptions,
   MapperResult,
   MapWarning,
+  Measurement,
   Performance,
   Provenance,
   WireRecord,
@@ -118,6 +119,331 @@ const fixed = (n: number): number | { coefficient: number; exponent: number } =>
 
 const basename = (name: string) => name.split("/").pop() ?? name;
 
+const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fitbit" });
+// §7.4: derived summaries Fitbit computed on-device/server; version is not published.
+const summaryAlg = (name: string): Provenance => ({
+  method: "algorithm",
+  sourceApp: "fitbit",
+  algorithm: { name, version: "takeout" },
+});
+
+// levels.summary.<stage>.minutes → registry sleep-duration token (whole-night quantities).
+const SLEEP_SUMMARY: Record<string, string> = {
+  deep: "sleep_deep",
+  light: "sleep_light",
+  rem: "sleep_rem",
+  wake: "sleep_awake",
+};
+
+// One intraday sample: `e` epoch-ms (for bucketing/offset math), `iso` its local spelling, `v` the value.
+type Sample = { e: number; iso: string; v: number };
+// One contiguous sleep segment on the night's timeline.
+type SleepSegment = { s: number; e: number; level: string };
+
+/** Everything the per-file-kind handlers share for one `mapFitbitTakeout` call. */
+interface FitbitCtx {
+  subject: string;
+  /** Offset stamped on offset-less local timestamps (opts.utcOffset ?? "Z"). */
+  off: string;
+  records: LiveRecord[];
+  warnings: MapWarning[];
+  /** Count one entry skipped for missing required fields (flushed to a per-file warning by the caller). */
+  skipEntry: () => void;
+}
+
+/** Push a Measurement, stamping the shared recordType/subject so callers pass only the varying fields. */
+function pushMeasurement(ctx: FitbitCtx, fields: Omit<Measurement, "recordType" | "subject">): void {
+  ctx.records.push({ recordType: "Measurement", subject: ctx.subject, ...fields });
+}
+
+// exercise-<N>.json → a Session (continuous WorkUnit) + measuredBy HR-mean/steps aggregates.
+function mapExerciseLog(entries: WireRecord[], ctx: FitbitCtx, fileName: string): void {
+  for (const entry of entries) {
+    const startIso = usToIso(String(entry.startTime ?? ""));
+    if (entry.logId == null || !startIso) {
+      ctx.skipEntry();
+      continue;
+    }
+    const durMs = Number(entry.activeDuration ?? entry.duration ?? 0);
+    const start = startIso + ctx.off;
+    const end = isoAt(epoch(startIso) + durMs) + ctx.off;
+    const sid = `fitbit-ex-${entry.logId}`;
+    const measuredBy: Link[] = [];
+    if (entry.averageHeartRate != null) {
+      pushMeasurement(ctx, {
+        id: `${sid}-hr-mean`,
+        type: "heart_rate_mean",
+        quantity: entry.averageHeartRate,
+        unit: "/min",
+        startTime: start,
+        endTime: end,
+        provenance: summaryAlg("fitbit-activity-summary"),
+      });
+      measuredBy.push({ type: "measuredBy", ref: `${sid}-hr-mean` });
+    }
+    if (entry.steps != null) {
+      pushMeasurement(ctx, {
+        id: `${sid}-steps`,
+        type: "step_count",
+        quantity: entry.steps,
+        unit: "1",
+        startTime: start,
+        endTime: end,
+        provenance: prov("sensor"),
+      });
+      measuredBy.push({ type: "measuredBy", ref: `${sid}-steps` });
+    }
+    const extra: Record<string, unknown> = {};
+    const perf: Performance = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
+    if (entry.distance != null) {
+      const unit = DIST_UNIT[entry.distanceUnit];
+      // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
+      // value+unit pair rides the extension.fitbit residue rail instead (and the
+      // routing is reported on the warnings channel).
+      if (unit) perf.distance = { absolute: { value: entry.distance, unit } };
+      else {
+        extra.distance = entry.distance;
+        if (entry.distanceUnit != null) extra.distanceUnit = entry.distanceUnit;
+        ctx.warnings.push({
+          code: "unknown-distance-unit",
+          message: `${fileName}: activity ${entry.logId} carries an unrecognized distanceUnit ${JSON.stringify(entry.distanceUnit ?? null)} — distance kept as raw residue in extension.fitbit, not mapped to performance.distance`,
+          context: { file: fileName, logId: String(entry.logId), distanceUnit: entry.distanceUnit ?? null },
+        });
+      }
+    }
+    if (entry.calories != null) perf.energy = { absolute: { value: entry.calories, unit: "kcal" } };
+    if (Array.isArray(entry.heartRateZones) && entry.heartRateZones.length) extra.heartRateZones = entry.heartRateZones;
+    if (Array.isArray(entry.activityLevel) && entry.activityLevel.length) extra.activityLevel = entry.activityLevel;
+    if (entry.elevationGain != null) extra.elevationGain = entry.elevationGain;
+    ctx.records.push({
+      id: sid,
+      recordType: "Session",
+      subject: ctx.subject,
+      clientRecordId: String(entry.logId),
+      disciplines: [disciplineFor(String(entry.activityName ?? "unknown"))],
+      intent: "train",
+      startTime: start,
+      endTime: end,
+      provenance: prov(entry.logType === "manual" ? "manual" : "sensor"),
+      ...(Object.keys(extra).length ? { extension: { fitbit: extra } } : {}),
+      workUnits: [
+        {
+          id: `${sid}-wu`,
+          recordType: "WorkUnit",
+          scoring: "continuous",
+          performance: perf,
+          ...(measuredBy.length ? { links: measuredBy } : {}),
+        },
+      ],
+    });
+  }
+}
+
+// steps-<date>.json → intraday step samples (value must parse finite; a non-numeric cell
+// would otherwise land NaN in the day's dataPoints — csv.ts num() discipline).
+function collectSteps(entries: WireRecord[], ctx: FitbitCtx, bucket: Sample[]): void {
+  for (const entry of entries) {
+    const iso = usToIso(String(entry.dateTime ?? ""));
+    const v = Number(entry.value);
+    if (iso && entry.value != null && Number.isFinite(v)) bucket.push({ e: epoch(iso), iso, v });
+    else ctx.skipEntry();
+  }
+}
+
+// heart_rate-<date>.json → intraday HR samples (documented UTC; the day-series stamps "Z").
+function collectHeartRate(entries: WireRecord[], ctx: FitbitCtx, bucket: Sample[]): void {
+  for (const entry of entries) {
+    const iso = usToIso(String(entry.dateTime ?? ""));
+    if (iso && entry.value?.bpm != null) bucket.push({ e: epoch(iso), iso, v: entry.value.bpm });
+    else ctx.skipEntry();
+  }
+}
+
+// §4.3: a night of stages = category Measurements over ADJACENT intervals. levels.data is the
+// contiguous timeline; levels.shortData (stages logs only) holds short (≤3 min) wakes that
+// OVERLAP it — physiologically real, so splice each one in: punch it out of the underlying
+// stage and insert an awake interval in its place.
+function spliceShortWakes(segments: SleepSegment[], shortData: WireRecord[]): SleepSegment[] {
+  let segs = segments;
+  for (const sd of shortData) {
+    const s = epoch(String(sd.dateTime));
+    const e = s + Number(sd.seconds) * 1000;
+    if (!Number.isFinite(s) || e <= s) continue;
+    const next: SleepSegment[] = [{ s, e, level: String(sd.level) }];
+    for (const g of segs) {
+      if (e <= g.s || s >= g.e) {
+        next.push(g);
+        continue;
+      }
+      if (g.s < s) next.push({ s: g.s, e: s, level: g.level });
+      if (e < g.e) next.push({ s: e, e: g.e, level: g.level });
+    }
+    segs = next.sort((a, b) => a.s - b.s);
+  }
+  return segs;
+}
+
+// sleep-<date>.json → adjacent sleep-stage category Measurements + Fitbit's own duration summaries.
+function mapSleepLog(logs: WireRecord[], ctx: FitbitCtx): void {
+  for (const log of logs) {
+    if (log.logId == null || !log.startTime) {
+      ctx.skipEntry();
+      continue;
+    }
+    const lid = `fitbit-sleep-${log.logId}`;
+    const start = stripFrac(String(log.startTime)) + ctx.off;
+    const end = log.endTime
+      ? stripFrac(String(log.endTime)) + ctx.off
+      : isoAt(epoch(String(log.startTime)) + Number(log.duration ?? 0)) + ctx.off;
+    const timeline: SleepSegment[] = (log.levels?.data ?? [])
+      .map((d: WireRecord) => {
+        const s = epoch(String(d.dateTime));
+        return { s, e: s + Number(d.seconds) * 1000, level: String(d.level) };
+      })
+      .filter((g: SleepSegment) => Number.isFinite(g.s) && g.e > g.s)
+      .sort((a: SleepSegment, b: SleepSegment) => a.s - b.s);
+    const segs = spliceShortWakes(timeline, log.levels?.shortData ?? []);
+    segs.forEach((g, i) => {
+      pushMeasurement(ctx, {
+        id: `${lid}-s${i}`,
+        type: "sleep_stage",
+        category: STAGE[g.level] ?? g.level,
+        startTime: isoAt(g.s) + ctx.off,
+        endTime: isoAt(g.e) + ctx.off,
+        provenance: prov("sensor"),
+      });
+    });
+    // Fitbit-computed summaries → registry sleep duration tokens (quantity over the window).
+    if (log.minutesAsleep != null)
+      pushMeasurement(ctx, {
+        id: `${lid}-duration`,
+        clientRecordId: String(log.logId),
+        type: "sleep_duration",
+        quantity: log.minutesAsleep,
+        unit: "min",
+        startTime: start,
+        endTime: end,
+        provenance: summaryAlg("fitbit-sleep-summary"),
+      });
+    for (const [stage, type] of Object.entries(SLEEP_SUMMARY)) {
+      const mins = log.levels?.summary?.[stage]?.minutes;
+      if (mins != null)
+        pushMeasurement(ctx, {
+          id: `${lid}-${stage}`,
+          type,
+          quantity: mins,
+          unit: "min",
+          startTime: start,
+          endTime: end,
+          provenance: summaryAlg("fitbit-sleep-summary"),
+        });
+    }
+  }
+}
+
+// weight-<date>.json → body-mass ([lb_av], exact fixed-point) + bmi + body-fat Measurements.
+function mapWeightLog(entries: WireRecord[], ctx: FitbitCtx): void {
+  for (const entry of entries) {
+    const iso = entry.date && entry.time ? usToIso(`${entry.date} ${entry.time}`) : undefined;
+    if (entry.logId == null || !iso || entry.weight == null) {
+      ctx.skipEntry();
+      continue;
+    }
+    const t = iso + ctx.off;
+    // Takeout weight is exported in pounds regardless of profile units (community-
+    // documented); kept as UCUM [lb_av] rather than converted — lossless per §4.2.
+    const aria = typeof entry.source === "string" && entry.source.toLowerCase() === "aria";
+    const p: Provenance = {
+      method: aria ? "sensor" : "manual",
+      sourceApp: "fitbit",
+      ...(aria ? { device: { manufacturer: "fitbit", model: entry.source } } : {}),
+    };
+    pushMeasurement(ctx, {
+      id: `fitbit-weight-${entry.logId}`,
+      clientRecordId: String(entry.logId),
+      type: "body_mass",
+      quantity: fixed(Number(entry.weight)),
+      unit: "[lb_av]",
+      startTime: t,
+      endTime: t,
+      provenance: p,
+    });
+    if (entry.bmi != null)
+      pushMeasurement(ctx, {
+        id: `fitbit-weight-${entry.logId}-bmi`,
+        type: "bmi",
+        quantity: fixed(Number(entry.bmi)),
+        unit: "kg/m2",
+        startTime: t,
+        endTime: t,
+        provenance: p,
+      });
+    if (entry.fat != null)
+      pushMeasurement(ctx, {
+        id: `fitbit-weight-${entry.logId}-fat`,
+        type: "body_fat_percentage",
+        quantity: fixed(Number(entry.fat)),
+        unit: "%",
+        startTime: t,
+        endTime: t,
+        provenance: p,
+      });
+  }
+}
+
+// resting_heart_rate-<date>.json → one daily resting-HR Measurement (a model estimate).
+function mapRestingHeartRate(entries: WireRecord[], ctx: FitbitCtx): void {
+  for (const entry of entries) {
+    const iso = usToIso(String(entry.dateTime ?? ""));
+    const v = entry.value?.value;
+    if (v === 0) continue; // documented no-data marker — days without data export as 0, not a loss
+    if (!iso || v == null) {
+      ctx.skipEntry();
+      continue;
+    }
+    const day = iso.slice(0, 10);
+    pushMeasurement(ctx, {
+      id: `fitbit-rhr-${day}`,
+      type: "resting_heart_rate",
+      quantity: v,
+      unit: "/min",
+      startTime: `${day}T00:00:00${ctx.off}`,
+      endTime: isoAt(epoch(`${day}T00:00:00`) + 86400000) + ctx.off,
+      provenance: prov("estimated"), // Fitbit RHR is a model estimate (the export carries an `error` term)
+    });
+  }
+}
+
+// Intraday per-minute/per-second entries accumulate across files, then emit one sampleArray
+// per calendar day (§4.3) — point-by-point records would not scale.
+function emitDaySeries(ctx: FitbitCtx, kind: "steps" | "heart_rate", entries: Sample[]): void {
+  const tzOff = kind === "heart_rate" ? "Z" : ctx.off; // HR is documented UTC; the rest local
+  const byDay = new Map<string, Sample[]>();
+  for (const en of [...entries].sort((a, b) => a.e - b.e)) {
+    const day = isoAt(en.e).slice(0, 10);
+    let bucket = byDay.get(day);
+    if (bucket === undefined) {
+      bucket = [];
+      byDay.set(day, bucket);
+    }
+    bucket.push(en);
+  }
+  for (const [day, ens] of byDay) {
+    const first = ens[0];
+    if (first === undefined) continue; // unreachable: buckets are created non-empty
+    const last = ens[ens.length - 1] ?? first;
+    pushMeasurement(ctx, {
+      id: `fitbit-${kind === "steps" ? "steps" : "hr"}-${day}`,
+      type: kind === "steps" ? "step_count" : "heart_rate",
+      unit: kind === "steps" ? "1" : "/min",
+      sampleArray: { offsets: ens.map((x) => (x.e - first.e) / 1000), dataPoints: ens.map((x) => x.v) },
+      startTime: first.iso + tzOff,
+      endTime: last.iso + tzOff,
+      provenance: prov("sensor"),
+    });
+  }
+}
+
 /**
  * Map any subset of a Google Takeout Fitbit folder — an array of `{ name, text }`
  * JSON files, classified by basename regardless of directory — to OpenBody wire
@@ -155,12 +481,33 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
 
   const warnings: MapWarning[] = [];
   const subject = subjectFor(opts, warnings, "fitbit");
-  const off = opts.utcOffset ?? "Z";
   const records: LiveRecord[] = [];
 
+  // Entries inside a recognized file that are missing the fields their encoding hangs
+  // off (logId, a parseable timestamp, …) — counted per file, reported once per file.
+  let skippedEntries = 0;
+  const ctx: FitbitCtx = {
+    subject,
+    off: opts.utcOffset ?? "Z",
+    records,
+    warnings,
+    skipEntry: () => {
+      skippedEntries++;
+    },
+  };
+  const flushSkippedEntries = (file: string) => {
+    if (skippedEntries === 0) return;
+    warnings.push({
+      code: "skipped-entries",
+      message: `${file}: ${skippedEntries} entr${skippedEntries === 1 ? "y" : "ies"} missing required fields (id/timestamp/value) — skipped`,
+      context: { file, count: skippedEntries },
+    });
+    skippedEntries = 0;
+  };
+
   // WireRecord-loose: raw Takeout JSON rows, not OpenBody records — accessed dynamically
-  // below. A recognized-kind file that isn't a JSON array is skipped WITH a warning
-  // (pre-WP7 this was a silent swallow).
+  // by the handlers. A recognized-kind file that isn't a JSON array is skipped WITH a
+  // warning (pre-WP7 this was a silent swallow).
   const parseArray = (f: FitbitFile): WireRecord[] => {
     let v: unknown;
     try {
@@ -183,325 +530,19 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
     }
     return v;
   };
-  // Entries inside a recognized file that are missing the fields their encoding hangs
-  // off (logId, a parseable timestamp, …) — counted per file, reported once per file.
-  let skippedEntries = 0;
-  const skipEntry = () => {
-    skippedEntries++;
-  };
-  const flushSkippedEntries = (file: string) => {
-    if (skippedEntries === 0) return;
-    warnings.push({
-      code: "skipped-entries",
-      message: `${file}: ${skippedEntries} entr${skippedEntries === 1 ? "y" : "ies"} missing required fields (id/timestamp/value) — skipped`,
-      context: { file, count: skippedEntries },
-    });
-    skippedEntries = 0;
-  };
-  const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fitbit" });
-  // §7.4: derived summaries Fitbit computed on-device/server; version is not published.
-  const summaryAlg = (name: string): Provenance => ({
-    method: "algorithm",
-    sourceApp: "fitbit",
-    algorithm: { name, version: "takeout" },
-  });
 
-  // Intraday per-minute/per-second entries accumulate across files, then emit one
-  // sampleArray per calendar day (§4.3) — point-by-point records would not scale.
-  type Sample = { e: number; iso: string; v: number };
+  // Intraday samples accumulate across files, then emit one sampleArray per day at the end.
   const intraday: { steps: Sample[]; heart_rate: Sample[] } = { steps: [], heart_rate: [] };
-  const daySeries = (kind: "steps" | "heart_rate", entries: Sample[]) => {
-    const tzOff = kind === "heart_rate" ? "Z" : off; // HR is documented UTC; the rest local
-    const byDay = new Map<string, typeof entries>();
-    for (const en of entries.sort((a, b) => a.e - b.e)) {
-      const day = isoAt(en.e).slice(0, 10);
-      let bucket = byDay.get(day);
-      if (bucket === undefined) {
-        bucket = [];
-        byDay.set(day, bucket);
-      }
-      bucket.push(en);
-    }
-    for (const [day, ens] of byDay) {
-      const first = ens[0];
-      if (first === undefined) continue; // unreachable: buckets are created non-empty
-      const last = ens[ens.length - 1] ?? first;
-      records.push({
-        id: `fitbit-${kind === "steps" ? "steps" : "hr"}-${day}`,
-        recordType: "Measurement",
-        subject,
-        type: kind === "steps" ? "step_count" : "heart_rate",
-        unit: kind === "steps" ? "1" : "/min",
-        sampleArray: { offsets: ens.map((x) => (x.e - first.e) / 1000), dataPoints: ens.map((x) => x.v) },
-        startTime: first.iso + tzOff,
-        endTime: last.iso + tzOff,
-        provenance: prov("sensor"),
-      });
-    }
-  };
 
   for (const f of files) {
     const b = basename(f.name);
-    if (/^exercise-\d+\.json$/.test(b)) {
-      for (const x of parseArray(f)) {
-        const startIso = usToIso(String(x.startTime ?? ""));
-        if (x.logId == null || !startIso) {
-          skipEntry();
-          continue;
-        }
-        const durMs = Number(x.activeDuration ?? x.duration ?? 0);
-        const start = startIso + off,
-          end = isoAt(epoch(startIso) + durMs) + off;
-        const sid = `fitbit-ex-${x.logId}`;
-        const measuredBy: Link[] = [];
-        if (x.averageHeartRate != null) {
-          records.push({
-            id: `${sid}-hr-mean`,
-            recordType: "Measurement",
-            subject,
-            type: "heart_rate_mean",
-            quantity: x.averageHeartRate,
-            unit: "/min",
-            startTime: start,
-            endTime: end,
-            provenance: summaryAlg("fitbit-activity-summary"),
-          });
-          measuredBy.push({ type: "measuredBy", ref: `${sid}-hr-mean` });
-        }
-        if (x.steps != null) {
-          records.push({
-            id: `${sid}-steps`,
-            recordType: "Measurement",
-            subject,
-            type: "step_count",
-            quantity: x.steps,
-            unit: "1",
-            startTime: start,
-            endTime: end,
-            provenance: prov("sensor"),
-          });
-          measuredBy.push({ type: "measuredBy", ref: `${sid}-steps` });
-        }
-        const extra: Record<string, unknown> = {};
-        const perf: Performance = { time: { absolute: { value: durMs / 1000, unit: "s" } } };
-        if (x.distance != null) {
-          const unit = DIST_UNIT[x.distanceUnit];
-          // Unrecognized distanceUnit: relabeling it km would fabricate data — the raw
-          // value+unit pair rides the extension.fitbit residue rail instead (and the
-          // routing is reported on the warnings channel).
-          if (unit) perf.distance = { absolute: { value: x.distance, unit } };
-          else {
-            extra.distance = x.distance;
-            if (x.distanceUnit != null) extra.distanceUnit = x.distanceUnit;
-            warnings.push({
-              code: "unknown-distance-unit",
-              message: `${f.name}: activity ${x.logId} carries an unrecognized distanceUnit ${JSON.stringify(x.distanceUnit ?? null)} — distance kept as raw residue in extension.fitbit, not mapped to performance.distance`,
-              context: { file: f.name, logId: String(x.logId), distanceUnit: x.distanceUnit ?? null },
-            });
-          }
-        }
-        if (x.calories != null) perf.energy = { absolute: { value: x.calories, unit: "kcal" } };
-        if (Array.isArray(x.heartRateZones) && x.heartRateZones.length) extra.heartRateZones = x.heartRateZones;
-        if (Array.isArray(x.activityLevel) && x.activityLevel.length) extra.activityLevel = x.activityLevel;
-        if (x.elevationGain != null) extra.elevationGain = x.elevationGain;
-        records.push({
-          id: sid,
-          recordType: "Session",
-          subject,
-          clientRecordId: String(x.logId),
-          disciplines: [disciplineFor(String(x.activityName ?? "unknown"))],
-          intent: "train",
-          startTime: start,
-          endTime: end,
-          provenance: prov(x.logType === "manual" ? "manual" : "sensor"),
-          ...(Object.keys(extra).length ? { extension: { fitbit: extra } } : {}),
-          workUnits: [
-            {
-              id: `${sid}-wu`,
-              recordType: "WorkUnit",
-              scoring: "continuous",
-              performance: perf,
-              ...(measuredBy.length ? { links: measuredBy } : {}),
-            },
-          ],
-        });
-      }
-    } else if (/^steps-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f)) {
-        const iso = usToIso(String(x.dateTime ?? ""));
-        // value must parse to a finite number — a non-numeric cell would otherwise land NaN
-        // in the day's dataPoints (csv.ts num() discipline); null stays a skip as before.
-        const v = Number(x.value);
-        if (iso && x.value != null && Number.isFinite(v)) intraday.steps.push({ e: epoch(iso), iso, v });
-        else skipEntry();
-      }
-    } else if (/^heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f)) {
-        const iso = usToIso(String(x.dateTime ?? ""));
-        if (iso && x.value?.bpm != null) intraday.heart_rate.push({ e: epoch(iso), iso, v: x.value.bpm });
-        else skipEntry();
-      }
-    } else if (/^sleep-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const log of parseArray(f)) {
-        if (log.logId == null || !log.startTime) {
-          skipEntry();
-          continue;
-        }
-        const lid = `fitbit-sleep-${log.logId}`;
-        const start = stripFrac(String(log.startTime)) + off;
-        const end = log.endTime
-          ? stripFrac(String(log.endTime)) + off
-          : isoAt(epoch(String(log.startTime)) + Number(log.duration ?? 0)) + off;
-        // §4.3: a night of stages = multiple category Measurements over ADJACENT intervals.
-        // levels.data is the contiguous timeline; levels.shortData (stages logs only) holds
-        // short (≤3 min) wakes that OVERLAP it — physiologically real wakes, so splice them
-        // in: punch each short wake out of the underlying stage and insert an awake interval.
-        let segs: { s: number; e: number; level: string }[] = (log.levels?.data ?? [])
-          .map((d: WireRecord) => {
-            const s = epoch(String(d.dateTime));
-            return { s, e: s + Number(d.seconds) * 1000, level: String(d.level) };
-          })
-          .filter((g: { s: number; e: number }) => Number.isFinite(g.s) && g.e > g.s)
-          .sort((a: { s: number }, b: { s: number }) => a.s - b.s);
-        for (const sd of log.levels?.shortData ?? []) {
-          const s = epoch(String(sd.dateTime)),
-            e = s + Number(sd.seconds) * 1000;
-          if (!Number.isFinite(s) || e <= s) continue;
-          const next: typeof segs = [{ s, e, level: String(sd.level) }];
-          for (const g of segs) {
-            if (e <= g.s || s >= g.e) {
-              next.push(g);
-              continue;
-            }
-            if (g.s < s) next.push({ s: g.s, e: s, level: g.level });
-            if (e < g.e) next.push({ s: e, e: g.e, level: g.level });
-          }
-          segs = next.sort((a, b) => a.s - b.s);
-        }
-        segs.forEach((g, i) => {
-          records.push({
-            id: `${lid}-s${i}`,
-            recordType: "Measurement",
-            subject,
-            type: "sleep_stage",
-            category: STAGE[g.level] ?? g.level,
-            startTime: isoAt(g.s) + off,
-            endTime: isoAt(g.e) + off,
-            provenance: prov("sensor"),
-          });
-        });
-        // Fitbit-computed summaries → registry sleep duration tokens (quantity over the window).
-        if (log.minutesAsleep != null)
-          records.push({
-            id: `${lid}-duration`,
-            recordType: "Measurement",
-            subject,
-            clientRecordId: String(log.logId),
-            type: "sleep_duration",
-            quantity: log.minutesAsleep,
-            unit: "min",
-            startTime: start,
-            endTime: end,
-            provenance: summaryAlg("fitbit-sleep-summary"),
-          });
-        const SUMMARY: Record<string, string> = {
-          deep: "sleep_deep",
-          light: "sleep_light",
-          rem: "sleep_rem",
-          wake: "sleep_awake",
-        };
-        for (const [k, type] of Object.entries(SUMMARY)) {
-          const mins = log.levels?.summary?.[k]?.minutes;
-          if (mins != null)
-            records.push({
-              id: `${lid}-${k}`,
-              recordType: "Measurement",
-              subject,
-              type,
-              quantity: mins,
-              unit: "min",
-              startTime: start,
-              endTime: end,
-              provenance: summaryAlg("fitbit-sleep-summary"),
-            });
-        }
-      }
-    } else if (/^weight-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f)) {
-        const iso = x.date && x.time ? usToIso(`${x.date} ${x.time}`) : undefined;
-        if (x.logId == null || !iso || x.weight == null) {
-          skipEntry();
-          continue;
-        }
-        const t = iso + off;
-        // Takeout weight is exported in pounds regardless of profile units (community-
-        // documented); kept as UCUM [lb_av] rather than converted — lossless per §4.2.
-        const aria = typeof x.source === "string" && x.source.toLowerCase() === "aria";
-        const p: Provenance = {
-          method: aria ? "sensor" : "manual",
-          sourceApp: "fitbit",
-          ...(aria ? { device: { manufacturer: "fitbit", model: x.source } } : {}),
-        };
-        records.push({
-          id: `fitbit-weight-${x.logId}`,
-          recordType: "Measurement",
-          subject,
-          clientRecordId: String(x.logId),
-          type: "body_mass",
-          quantity: fixed(Number(x.weight)),
-          unit: "[lb_av]",
-          startTime: t,
-          endTime: t,
-          provenance: p,
-        });
-        if (x.bmi != null)
-          records.push({
-            id: `fitbit-weight-${x.logId}-bmi`,
-            recordType: "Measurement",
-            subject,
-            type: "bmi",
-            quantity: fixed(Number(x.bmi)),
-            unit: "kg/m2",
-            startTime: t,
-            endTime: t,
-            provenance: p,
-          });
-        if (x.fat != null)
-          records.push({
-            id: `fitbit-weight-${x.logId}-fat`,
-            recordType: "Measurement",
-            subject,
-            type: "body_fat_percentage",
-            quantity: fixed(Number(x.fat)),
-            unit: "%",
-            startTime: t,
-            endTime: t,
-            provenance: p,
-          });
-      }
-    } else if (/^resting_heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) {
-      for (const x of parseArray(f)) {
-        const iso = usToIso(String(x.dateTime ?? ""));
-        const v = x.value?.value;
-        if (v === 0) continue; // documented no-data marker — days without data export as 0, not a loss
-        if (!iso || v == null) {
-          skipEntry();
-          continue;
-        }
-        const day = iso.slice(0, 10);
-        records.push({
-          id: `fitbit-rhr-${day}`,
-          recordType: "Measurement",
-          subject,
-          type: "resting_heart_rate",
-          quantity: v,
-          unit: "/min",
-          startTime: `${day}T00:00:00${off}`,
-          endTime: isoAt(epoch(`${day}T00:00:00`) + 86400000) + off,
-          provenance: prov("estimated"), // Fitbit RHR is a model estimate (the export carries an `error` term)
-        });
-      }
-    } else {
+    if (/^exercise-\d+\.json$/.test(b)) mapExerciseLog(parseArray(f), ctx, f.name);
+    else if (/^steps-\d{4}-\d{2}-\d{2}\.json$/.test(b)) collectSteps(parseArray(f), ctx, intraday.steps);
+    else if (/^heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) collectHeartRate(parseArray(f), ctx, intraday.heart_rate);
+    else if (/^sleep-\d{4}-\d{2}-\d{2}\.json$/.test(b)) mapSleepLog(parseArray(f), ctx);
+    else if (/^weight-\d{4}-\d{2}-\d{2}\.json$/.test(b)) mapWeightLog(parseArray(f), ctx);
+    else if (/^resting_heart_rate-\d{4}-\d{2}-\d{2}\.json$/.test(b)) mapRestingHeartRate(parseArray(f), ctx);
+    else {
       // Not a recognized Fitbit Takeout kind — ignored, but no longer silently.
       warnings.push({
         code: "unrecognized-file",
@@ -512,7 +553,7 @@ export function mapFitbitTakeout(files: FitbitFile[], opts: FitbitMapOptions = {
     flushSkippedEntries(f.name);
   }
 
-  daySeries("steps", intraday.steps);
-  daySeries("heart_rate", intraday.heart_rate);
+  emitDaySeries(ctx, "steps", intraday.steps);
+  emitDaySeries(ctx, "heart_rate", intraday.heart_rate);
   return { records, warnings };
 }
