@@ -141,7 +141,15 @@ The published package **vendors a schema snapshot** (`vendor/openbody.schema.jso
 refreshed from the sibling `openbody` repo by `npm run sync-schema`, which runs
 automatically pre-pack/publish) — it does not depend on a sibling checkout at
 runtime. `npm run build` compiles `src/` to `dist/` (ESM + `.d.ts`); `npm pack
---dry-run` shows exactly what ships (`dist/`, `vendor/`, `README.md`, `LICENSE`).
+--dry-run` shows exactly what ships (`dist/`, `src/`, `vendor/`, `README.md`,
+`LICENSE`). `src/` ships so the shipped source maps resolve to real files.
+
+**Bundling for the browser.** The main entry point is browser-safe (no `node:*` in the
+module graph — see the Layout table), but `validate`/`resolve` load the vendored schema
+and crosswalk via JSON import attributes (`import … with { type: "json" }`, preserved
+into `dist/`). Bundle with a toolchain that understands import attributes — modern
+esbuild / Vite / Rollup / Webpack 5 do; a much older bundler may need a JSON plugin or
+an upgrade. Node consumers need nothing extra (the `>=20.19` engines floor covers it).
 
 ## Develop this repo
 
@@ -160,8 +168,9 @@ npm run format     # biome format --write
 npm run build      # compile src/ -> dist/
 ```
 
-The vector runner (dev/test-only, not shipped) reads the standard (schema + vectors)
-from a sibling checkout (default `../openbody`); override with
+The vector runner (dev/test-only, not part of the package's public API — it is not
+re-exported from `src/index.ts` and is unreachable through the `exports` map) reads the
+standard (schema + vectors) from a sibling checkout (default `../openbody`); override with
 `OPENBODY_STANDARD=/path/to/openbody`. Schema *validation* prefers the vendored
 snapshot when present (run `npm run sync-schema` to refresh it), falling back to the
 sibling-repo path otherwise — so `OPENBODY_STANDARD` also lets you validate against
@@ -268,7 +277,7 @@ lossy float64 path.
 | `src/mappers/{csv,xml,shared}.ts` | internal mapper plumbing (quoted-CSV parsing, regex-XML parsing, cross-format telemetry helpers) — deliberately not re-exported from the package entry |
 | `test/*.test.ts` | vitest suite for the core: lossless parse, canonical form, conformance vectors, resolver, validate |
 | `test/mappers/*.test.ts` | one vitest file per mapper (inbound + `to-strong`), plus `test/helpers.ts` for shared assertions (`expectAllValid`, `expectRoundTripStable`, `readExample`, …) |
-| `examples/` | runnable dogfooding scripts, one directory per format (`map-<format>.ts` + sample fixture(s) + a per-directory README) — see `examples/README.md` |
+| `examples/` | runnable dogfooding scripts, one directory per format (`map-<format>.ts` + sample fixture(s), most with a README) — see `examples/README.md` |
 | `scripts/run-vectors.ts` | conformance-vector runner (`npm run vectors`) |
 | `scripts/pin-expected.ts` | dev tool: regenerates a conformance vector's pinned `expected` canonical form from this implementation |
 | `scripts/sync-schema.mjs` | copies the schema from the sibling `openbody` repo into `vendor/` for publishing |

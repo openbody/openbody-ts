@@ -6,7 +6,7 @@ public.
 
 > **The mapping logic is now the mapper SDK** (`src/mappers/`): `mapHevy`, `mapStrong`,
 > `mapStrava`, `mapAppleHealth` — pure `input → records[]` functions, round-trip tested
-> (`npm run mappers`: every wire record validates + normalization is idempotent). The
+> (`npx vitest run test/mappers`: every wire record validates + normalization is idempotent). The
 > scripts here are thin runners over those functions. Health Connect is covered by the
 > Apple Health mapper (identical mapping).
 
