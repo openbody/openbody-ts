@@ -54,7 +54,8 @@
     "prepack": "npm run sync-schema && npm run sync-crosswalk && npm run build",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "prepare": "husky"
   },
   "dependencies": {
     "ajv": "^8.17.1",
@@ -67,8 +68,13 @@
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.9",
     "fast-check": "^4.8.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
     "vitest": "^4.1.9"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs,cjs,json,jsonc}": "biome check --write --no-errors-on-unmatched"
   }
 }
