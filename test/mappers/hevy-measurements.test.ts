@@ -166,4 +166,42 @@ describe("mapHevyMeasurements", () => {
       expect(empty.records).toEqual([]);
     });
   });
+
+  // Dogfood guard (OB-56): a trimmed slice of a REAL Hevy export, whose shape the synthetic
+  // fixtures above don't exercise — the header row is FULLY QUOTED (`"date","weight_kg",…`, vs
+  // the unquoted fixture headers), most rows are SPARSE (only weight_kg logged; circumferences
+  // never filled), single-digit days ("9 Feb"), and some values are bare INTEGERS ("83", "20")
+  // whose §4.2 fixed-point is exponent 0. One Measurement per non-empty metric cell, nothing
+  // dropped, everything schema-valid — the invariants the "156 measurements" real run relies on.
+  describe("real export shape (OB-56 dogfood)", () => {
+    const realCsv = readExample("hevy/hevy-measurements-real-sample.csv");
+    const realOut = mapHevyMeasurements(realCsv, { subject: "me" });
+    const realMeas = ofKind(realOut.records, "Measurement");
+
+    it("parses the quoted header + maps every non-empty metric cell with no data loss", () => {
+      // 4 weight cells + 2 fat cells across 4 sparse rows = 6 Measurements, nothing else.
+      expect(realMeas).toHaveLength(6);
+      expect(realMeas.filter((r) => r.type === "body_mass")).toHaveLength(4);
+      expect(realMeas.filter((r) => r.type === "body_fat_percentage")).toHaveLength(2);
+      // Weight-only rows contribute exactly their weight — no fabricated circumference records.
+      expect(realMeas.every((r) => r.type === "body_mass" || r.type === "body_fat_percentage")).toBe(true);
+      // Clean export + explicit subject → no warnings at all (no drift, no default-subject).
+      expect(realOut.warnings).toEqual([]);
+    });
+
+    it("encodes bare-integer cell values as exact exponent-0 fixed-point", () => {
+      // Row "26 Feb 2023" logs weight "83" (integer) → {83, 0}, kg.
+      const intWeight = realMeas.find((r) => r.startTime === "2023-02-26T00:00:00Z" && r.type === "body_mass");
+      expect(intWeight?.quantity).toEqual({ coefficient: 83, exponent: 0 });
+      expect(intWeight?.unit).toBe("kg");
+      // Row "5 Dec 2024" logs fat "20" (integer) → {20, 0}, %.
+      const intFat = realMeas.find((r) => r.type === "body_fat_percentage" && r.startTime === "2024-12-05T00:00:00Z");
+      expect(intFat?.quantity).toEqual({ coefficient: 20, exponent: 0 });
+      expect(intFat?.unit).toBe("%");
+    });
+
+    it("maps the real shape to valid, round-trip-stable wire records", () => {
+      expectValidAndStable(realOut.records);
+    });
+  });
 });
