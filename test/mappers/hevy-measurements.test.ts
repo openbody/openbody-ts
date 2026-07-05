@@ -1,21 +1,31 @@
 // Hevy measurement_data.csv mapper tests: body-metric CSV → point-in-time Pillar-A
 // Measurements. Covers the standard bar (schema-validate + round-trip), the canonical
-// body_mass/body_fat_percentage tokens, a left/right circumference pair with laterality in
-// the token, empty cells producing no records, the namespaced-fallback warning, and the
-// WP7 error/warnings contract. Mirrors concept2.test.ts / fitbit.test.ts structure.
+// body_mass/body_fat_percentage tokens, the SIDE-AGNOSTIC anthropometry circumference tokens
+// with the side carried on the `laterality` field (§4.1), the UNITS behaviour (an inches
+// export → `[in_i]` vs a centimetres export → `cm`, while weight stays kg regardless), empty
+// cells producing no records, the unrecognized-column drift warning, and the WP7
+// error/warnings contract. Mirrors concept2.test.ts / fitbit.test.ts structure.
 import { describe, expect, it } from "vitest";
 import { MapperInputError } from "../../src/errors.js";
 import { mapHevyMeasurements } from "../../src/mappers/hevy-measurements.js";
 import { expectValidAndStable, ofKind, readExample } from "../helpers.js";
 
-const csv = readExample("hevy/hevy-measurements-sample.csv");
-const out = mapHevyMeasurements(csv, { subject: "me" });
+// The founder's real export uses inch (`_in`) circumference columns.
+const inCsv = readExample("hevy/hevy-measurements-sample.csv");
+const out = mapHevyMeasurements(inCsv, { subject: "me" });
 const measurements = ofKind(out.records, "Measurement");
 const byType = (t: string) => measurements.filter((r) => r.type === t);
+
+// A second real user's export uses centimetre (`_cm`) circumference columns.
+const cmCsv = readExample("hevy/hevy-measurements-cm-sample.csv");
+const cmOut = mapHevyMeasurements(cmCsv, { subject: "me" });
+const cmMeas = ofKind(cmOut.records, "Measurement");
+const cmByType = (t: string) => cmMeas.filter((r) => r.type === t);
 
 describe("mapHevyMeasurements", () => {
   it("maps the measurement sample to valid, round-trip-stable wire records", () => {
     expectValidAndStable(out.records);
+    expectValidAndStable(cmOut.records);
   });
 
   // weight_kg → canonical body_mass in kg, exact §4.2 fixed-point (70.5 → 705e-1), point-in-time.
@@ -38,11 +48,14 @@ describe("mapHevyMeasurements", () => {
     expect(f[0]?.unit).toBe("%");
   });
 
-  // A both-sides circumference row → two Measurements whose left/right laterality lives in the
-  // token (schema/registry have no laterality field), same unit [in_i], distinct exact values.
-  it("emits a left/right circumference pair with laterality encoded in the token", () => {
-    const left = byType("hevy:circumference_bicep_left");
-    const right = byType("hevy:circumference_bicep_right");
+  // INCHES export: circumference columns are `_in` → SIDE-AGNOSTIC anthropometry tokens in
+  // `[in_i]`. A both-sides row → two `bicep_circumference` Measurements distinguished by the
+  // `laterality` FIELD (§4.1), not by the type token, with distinct exact values.
+  it("maps `_in` circumferences to side-agnostic tokens in [in_i], side on the laterality field", () => {
+    const biceps = byType("bicep_circumference");
+    expect(biceps, "both bicep sides share the side-agnostic type").toHaveLength(2);
+    const left = biceps.filter((r) => r.laterality === "left");
+    const right = biceps.filter((r) => r.laterality === "right");
     expect(left, "left bicep").toHaveLength(1);
     expect(right, "right bicep").toHaveLength(1);
     expect(left[0]?.unit).toBe("[in_i]");
@@ -51,6 +64,37 @@ describe("mapHevyMeasurements", () => {
     expect(right[0]?.quantity).toEqual({ coefficient: 1475, exponent: -2 });
     expect(left[0]?.startTime).toBe("2024-01-07T08:00:00Z");
     expect(left[0]?.id).not.toContain("#");
+    // Non-lateral stem → NO laterality field; `hips` → `hip_circumference`; `neck` → `neck_circumference`.
+    const neck = byType("neck_circumference")[0];
+    expect(neck?.unit).toBe("[in_i]");
+    expect(neck?.laterality).toBeUndefined();
+    expect(neck?.quantity).toEqual({ coefficient: 155, exponent: -1 });
+  });
+
+  // CENTIMETRES export (the bug fix): the SAME canonical tokens, but unit `cm` from the `_cm`
+  // suffix — these used to match nothing and be silently dropped.
+  it("maps `_cm` circumferences to the SAME canonical tokens but in cm", () => {
+    const neck = cmByType("neck_circumference");
+    expect(neck, "neck circumference").toHaveLength(1);
+    expect(neck[0]?.unit).toBe("cm");
+    expect(neck[0]?.laterality).toBeUndefined();
+    expect(neck[0]?.quantity).toEqual({ coefficient: 385, exponent: -1 });
+    const biceps = cmByType("bicep_circumference");
+    const left = biceps.filter((r) => r.laterality === "left");
+    const right = biceps.filter((r) => r.laterality === "right");
+    expect(left[0]?.unit).toBe("cm");
+    expect(right[0]?.unit).toBe("cm");
+    expect(left[0]?.quantity).toEqual({ coefficient: 372, exponent: -1 });
+    expect(right[0]?.quantity).toEqual({ coefficient: 378, exponent: -1 });
+  });
+
+  // weight is ALWAYS kg regardless of the circumference unit system.
+  it("keeps weight in kg even in a centimetres export", () => {
+    const w = cmByType("body_mass");
+    expect(w, "expected one body_mass record").toHaveLength(1);
+    expect(w[0]?.unit).toBe("kg");
+    expect(w[0]?.quantity).toEqual({ coefficient: 823, exponent: -1 });
+    expect(cmByType("body_fat_percentage")[0]?.unit).toBe("%");
   });
 
   // One Measurement per NON-EMPTY cell only: the all-empty-except-date row yields nothing, and
@@ -59,26 +103,43 @@ describe("mapHevyMeasurements", () => {
     expect(measurements.some((r) => r.startTime === "2024-01-09T08:00:00Z")).toBe(false);
     // 1 weight + 1 fat + 2 bicep + 1 neck = 5 non-empty cells across the sample.
     expect(measurements).toHaveLength(5);
+    expect(cmMeas).toHaveLength(5); // 1 weight + 1 fat + 1 neck + 2 bicep
   });
 
   describe("errors + warnings (WP7 contract)", () => {
-    // Each distinct circumference column with no canonical registry token warns exactly once.
-    it("fires unmapped-measurement-type once per distinct namespaced circumference column", () => {
-      const unmapped = out.warnings.filter((w) => w.code === "unmapped-measurement-type");
-      const cols = unmapped.map((w) => w.context?.column).sort();
-      // bicep_left, bicep_right, neck are the three circumference columns with data in the sample.
-      expect(cols).toEqual(["left_bicep_in", "neck_in", "right_bicep_in"]);
-      expect(unmapped.every((w) => String(w.context?.type).startsWith("hevy:circumference_"))).toBe(true);
+    // Every mapped type is canonical now, so a clean export emits NO warnings when a subject
+    // is provided (no unrecognized columns, no default-subject).
+    it("a clean run with a subject emits no warnings; without a subject only default-subject", () => {
+      expect(out.warnings).toEqual([]);
+      expect(cmOut.warnings).toEqual([]);
+      const noSubject = mapHevyMeasurements(inCsv);
+      expect(noSubject.warnings.map((w) => w.code)).toEqual(["default-subject"]);
     });
 
-    it("a clean run emits only default-subject; passing a subject emits nothing extra", () => {
-      // With a subject provided the only warnings are the namespaced-type notices (no default-subject).
-      expect(out.warnings.some((w) => w.code === "default-subject")).toBe(false);
-      const noSubject = mapHevyMeasurements(csv);
-      expect(noSubject.warnings.filter((w) => w.code === "default-subject")).toHaveLength(1);
-      // A weight-only CSV maps cleanly with no namespaced columns → only default-subject.
-      const clean = mapHevyMeasurements('date,weight_kg\n"3 Jan 2024, 07:30",70.5\n');
-      expect(clean.warnings.map((w) => w.code)).toEqual(["default-subject"]);
+    // Format-drift guard: a header column that is neither `date` nor a recognized metric
+    // surfaces as `unrecognized-column`, once, instead of being silently dropped.
+    it("fires unrecognized-column once per unknown header column (surfaces format drift)", () => {
+      const drift = mapHevyMeasurements(
+        'date,weight_kg,bodyfat_ratio\n"3 Jan 2024, 07:30",70.5,0.18\n"5 Jan 2024, 07:30",71,0.17\n',
+        { subject: "me" },
+      );
+      const unrec = drift.warnings.filter((w) => w.code === "unrecognized-column");
+      expect(unrec).toHaveLength(1);
+      expect(unrec[0]?.context?.column).toBe("bodyfat_ratio");
+      // The recognized weight column still maps; the unknown one contributes no records.
+      expect(ofKind(drift.records, "Measurement").every((r) => r.type === "body_mass")).toBe(true);
+    });
+
+    // A circumference stem we don't know (or a new unit spelling) also surfaces, not drops.
+    it("treats an unknown circumference stem/unit as an unrecognized column", () => {
+      const drift = mapHevyMeasurements('date,weight_kg,wingspan_in,neck_m\n"3 Jan 2024, 07:30",70.5,72,40\n', {
+        subject: "me",
+      });
+      const cols = drift.warnings
+        .filter((w) => w.code === "unrecognized-column")
+        .map((w) => w.context?.column)
+        .sort();
+      expect(cols).toEqual(["neck_m", "wingspan_in"]);
     });
 
     it("degrades a blank-date row with an unparseable-date warning + skips it", () => {

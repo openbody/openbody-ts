@@ -348,6 +348,8 @@ export interface Measurement extends Envelope {
   type: string;
   /** UCUM unit; conditionally required by value kind (§4.1). */
   unit?: string;
+  /** Which body side the observation pertains to (§4.1); omitted for midline/non-lateral measurements. Distinct from the exercise facets.laterality (§6.3) and WorkUnit.sides (§5.5). */
+  laterality?: "left" | "right" | "bilateral";
   startTime?: Timestamp;
   endTime?: Timestamp;
   quantity?: WireNumber;
