@@ -4,3 +4,6 @@ vendor/
 *.log
 .DS_Store
 coverage/
+
+# Claude Code
+.claude/
