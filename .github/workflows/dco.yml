@@ -1,0 +1,62 @@
+name: DCO
+
+# Verifies every commit in a pull request carries a Developer Certificate of Origin
+# sign-off (`Signed-off-by:` trailer, added by `git commit -s`). See CONTRIBUTING.md.
+#
+# Self-contained by design: no third-party action, no secrets, read-only. It is safe to
+# run on pull requests from forks because it only reads commit metadata.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  dco-check:
+    name: Check sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Signed-off-by on every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          range="$(git merge-base "$BASE_SHA" "$HEAD_SHA")..$HEAD_SHA"
+
+          missing=0
+          # %P is the parent list; a merge commit has 2+ parents (a space) — skip those.
+          while IFS= read -r sha; do
+            parents="$(git show -s --format='%P' "$sha")"
+            case "$parents" in
+              *" "*) continue ;;  # merge commit — not authored content, skip
+            esac
+
+            author="$(git show -s --format='%an <%ae>' "$sha")"
+            subject="$(git show -s --format='%s' "$sha")"
+            signoffs="$(git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha")"
+
+            if [ -z "${signoffs//[[:space:]]/}" ]; then
+              echo "::error::Commit $sha is missing a Signed-off-by trailer"
+              echo "         \"$subject\" — by $author"
+              missing=$((missing + 1))
+            fi
+          done < <(git rev-list "$range")
+
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "$missing commit(s) are not signed off under the DCO (https://developercertificate.org/)."
+            echo "Fix: add the trailer to each commit, e.g."
+            echo "  git rebase --exec 'git commit --amend --no-edit -s' <base>..HEAD"
+            echo "or sign new commits as you go with 'git commit -s'."
+            exit 1
+          fi
+
+          echo "All commits are DCO-signed."

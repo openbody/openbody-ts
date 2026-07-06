@@ -105,6 +105,14 @@ describes. A change to `normalize`/`canonical`/`validate` that shifts canonical 
 behaviour, it needs a corresponding new/updated vector in the `openbody` repo — and, since
 the SPEC is the source of truth, a spec change first.
 
+## Sign-off (DCO)
+
+All commits must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) —
+add a `Signed-off-by: Name <email>` trailer with `git commit -s`. This certifies you have
+the right to submit the contribution; a DCO check gates merges (consistent with the
+`openbody` standard repo). To sign off existing commits on a branch:
+`git rebase --exec 'git commit --amend --no-edit -s' origin/main`.
+
 ## Code of Conduct
 
 Please be respectful. Report concerns to **conduct@openbody.dev**.
