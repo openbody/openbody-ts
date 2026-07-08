@@ -54,12 +54,16 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          # Node 24 ships npm >= 11.5.1, which has OIDC trusted publishing AND its bundled
+          # `sigstore` (needed for provenance) intact. Do NOT `npm i -g npm@latest` on an older
+          # Node instead: self-upgrading npm drops the bundled sigstore, and provenance
+          # generation then dies with "Cannot find module 'sigstore'" at publish time.
+          node-version: "24"
           cache: npm
           cache-dependency-path: openbody-ts/package-lock.json
 
-      - name: Upgrade npm (OIDC trusted publishing needs npm >= 11.5.1)
-        run: npm install -g npm@latest
+      - name: Tool versions (npm must be >= 11.5.1 for OIDC + provenance)
+        run: node -v && npm -v
 
       - name: Install
         working-directory: openbody-ts
