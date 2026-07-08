@@ -5,11 +5,13 @@ name: release
 # Merging that PR is how a release is cut — with no pending changesets, the changesets action
 # runs `publish` instead and ships any version not already on npm (a no-op if nothing is ahead).
 #
-# Publishing needs an `NPM_TOKEN` repo secret (an npm automation / granular token with publish
-# rights on the @openbody scope). Without it the publish step fails; the version-PR step does not
-# need it. `prepack` (sync-schema && sync-crosswalk && build) rebuilds the bundled `vendor/` data
-# from the sibling repos, so — like conformance.yml — we check them out and point
-# OPENBODY_STANDARD / OPENBODY_REGISTRY at them, otherwise the tarball ships without its data.
+# Publishing uses npm Trusted Publishing (OIDC): no long-lived NPM_TOKEN. The job presents a
+# GitHub OIDC identity (id-token: write) that npm exchanges for a short-lived credential, and
+# npm attaches a signed provenance attestation automatically. One-time setup on npmjs.com:
+# @openbody/openbody-ts -> Settings -> Trusted Publisher -> GitHub Actions, pointing at this
+# repo + workflow (release.yml). `prepack` (sync-schema && sync-crosswalk && build) rebuilds the
+# bundled `vendor/` data from the sibling repos, so — like conformance.yml — we check them out
+# and point OPENBODY_STANDARD / OPENBODY_REGISTRY at them, else the tarball ships without data.
 on:
   push:
     branches: [main]
@@ -20,6 +22,7 @@ concurrency: release-${{ github.ref }}
 permissions:
   contents: write # push the version-bump branch
   pull-requests: write # open/update the Version Packages PR
+  id-token: write # OIDC — mint a short-lived npm credential via Trusted Publishing
 
 jobs:
   release:
@@ -54,7 +57,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: openbody-ts/package-lock.json
-          registry-url: https://registry.npmjs.org # writes .npmrc that reads NODE_AUTH_TOKEN
+
+      - name: Upgrade npm (OIDC trusted publishing needs npm >= 11.5.1)
+        run: npm install -g npm@latest
 
       - name: Install
         working-directory: openbody-ts
@@ -65,12 +70,12 @@ jobs:
         with:
           cwd: openbody-ts
           version: npm run version-packages
-          publish: npm run release # `changeset publish` — skips versions already on npm
+          publish: npm run release # `changeset publish` — skips versions already on npm; OIDC auth
           commit: "chore(release): version packages"
           title: "chore(release): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # prepack regenerates vendor/ from the siblings checked out above
+          # No NPM_TOKEN — auth is via OIDC (id-token: write above + npm Trusted Publisher config).
+          # prepack regenerates vendor/ from the siblings checked out above.
           OPENBODY_STANDARD: ${{ github.workspace }}/openbody
           OPENBODY_REGISTRY: ${{ github.workspace }}/openbody-registry
