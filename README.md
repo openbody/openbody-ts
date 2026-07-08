@@ -4,7 +4,7 @@ The **TypeScript reference implementation** of the [OpenBody](https://github.com
 standard — validate, canonically normalize (the conformance suite's EQUIVALENCE.md method), and check equivalence of OpenBody
 records, plus a conformance-vector runner.
 
-> Status: early — tracks the **current pre-v1.0 OpenBody draft** (see the standard's
+> Status: on npm as `@openbody/openbody-ts`, tracking the **current pre-v1.0 OpenBody draft** (see the standard's
 > `CHANGELOG.md`). A reference implementation is *one* implementation, not normative —
 > `SPEC.md` is the source of truth.
 > **Licensed Apache-2.0** (the standard itself is OWFa-1.0; kept in a separate repo).
@@ -116,27 +116,23 @@ try {
 }
 ```
 
-## Install (as a dependency)
-
-Not yet published to npm (`OB-11` — packaging is ready; publish itself is a
-deliberate, separate action gated on the project's go-public timing). **Until then,
-install from a git checkout** — pack a tarball and install that (the `prepack` hook
-vendors the schema + crosswalk snapshots and builds `dist/` automatically):
+## Install
 
 ```bash
-# side-by-side checkouts (the pack step reads the schema + registry from the siblings):
-git clone https://github.com/openbody/openbody.git
-git clone https://github.com/openbody/openbody-registry.git
-git clone https://github.com/openbody/openbody-ts.git
-(cd openbody-ts && npm ci && npm pack)          # → openbody-openbody-ts-<version>.tgz
-npm install ./openbody-ts/openbody-openbody-ts-*.tgz   # in your project
+npm install @openbody/openbody-ts
 ```
 
-A plain `npm install git+https://github.com/openbody/openbody-ts.git` does **not**
-work yet: the vendored data snapshots (`vendor/`) are deliberately gitignored and a
-git install can't see the sibling repos to regenerate them.
+```ts
+import { validate, normalizeDocument, equivalent } from "@openbody/openbody-ts";
+```
 
-Once published: `npm install @openbody/openbody-ts`, then `import { validate, normalizeDocument, equivalent } from "@openbody/openbody-ts"`.
+Requires Node ≥ 20.19. Published with build provenance (via GitHub Actions OIDC trusted
+publishing), and the vendored schema + crosswalk snapshots (`vendor/`) are baked into the
+tarball at publish time — so a normal install needs no sibling checkouts.
+
+Building from a git checkout instead (to contribute)? See `CONTRIBUTING.md`: the `prepack`
+hook regenerates `vendor/` from the sibling `openbody` + `openbody-registry` repos, which a
+plain `npm install git+…` can't do (those snapshots are gitignored).
 
 The published package **vendors a schema snapshot** (`vendor/openbody.schema.json`,
 refreshed from the sibling `openbody` repo by `npm run sync-schema`, which runs
