@@ -1,5 +1,17 @@
 # @openbody/openbody-ts
 
+## 0.3.0
+
+### Minor Changes
+
+- 56d4ccf: Harden `mapFit` against documented non-Garmin device quirks (OB-83): tolerantly normalize numeric fields a lenient decoder wraps in an array or `{ value }` object (COROS's field-size spec violation, python-fitparse#116), capture **every** lap into a per-lap WorkUnit instead of dropping the per-lap breakdown (guarding the first-lap-only defect reported for some Suunto exports), and degrade gracefully on sparse decodes with missing optional fields (Polar). Lap-less activities are unchanged. Fixtures are SYNTHETIC reproductions of each defect's shape; real-device-file verification (COROS + Suunto + Zwift exports) remains as a follow-up acceptance step.
+- 5bc44c0: feat(mappers): add Fitbod CSV mapper (`mapFitbod`). Maps a Fitbod workout export (one
+  row per set) to OpenBody Sessions/Exercises/WorkUnits — sessions inferred from a >3h gap
+  between set timestamps, reps/weight/duration/distance scoring (distance+time → `continuous`
+  per §5.5), and Fitbod-only fields (warmup/incline/resistance/multiplier) preserved
+  losslessly in a `com.fitbod.export` extension. Fixture is synthetic — real-export
+  verification tracked in OB-82.
+
 ## 0.2.1
 
 ### Patch Changes
