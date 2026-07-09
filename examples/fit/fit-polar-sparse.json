@@ -1,0 +1,11 @@
+{
+  "_comment": "SYNTHETIC regression fixture (OB-83) — NOT a real Polar export. Reproduces the SHAPE of Polar's deliberately sparse FIT: most optional fields absent (no position/power/cadence streams, no distance/calorie totals). mapFit must degrade gracefully — omit the absent targets/streams, never crash. NOTE: Polar's BULK takeout is JSON, not FIT, and is out of scope here. Real Polar file verification is still outstanding.",
+  "sessions": [
+    { "start_time": "2026-07-02T06:30:00Z", "sport": "running", "total_elapsed_time": 180 }
+  ],
+  "records": [
+    { "timestamp": "2026-07-02T06:30:00Z", "heart_rate": 132 },
+    { "timestamp": "2026-07-02T06:31:00Z", "heart_rate": 141 },
+    { "timestamp": "2026-07-02T06:32:00Z", "heart_rate": 147 }
+  ]
+}

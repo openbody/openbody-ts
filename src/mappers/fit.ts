@@ -33,47 +33,58 @@ import type {
 } from "../types.js";
 import { iso, makeDisciplineMapper, makeScalarStream, pickSeries, subjectFor } from "./shared.js";
 
+/**
+ * A numeric FIT field. Well-formed decoders hand back a plain `number`, but a *tolerant*
+ * decoder faced with COROS's field-size spec violation (see python-fitparse#116: a field
+ * whose declared `size` isn't an integer multiple of its base-type size) reads the field
+ * as several elements and surfaces the scalar wrapped in a single-element — occasionally
+ * pad-suffixed — array (e.g. `heart_rate: [138]` or `[138, 255]`). `num()` below normalizes
+ * every shape (plain / array / `{ value }`) back to one scalar, so the public input
+ * contract admits both rather than silently mis-reading a COROS export.
+ */
+type FitNumber = number | number[] | { value: number };
+
 interface DecodedRecord {
   timestamp: string;
-  position_lat?: number;
-  position_long?: number;
-  altitude?: number;
-  heart_rate?: number;
-  power?: number;
-  cadence?: number;
+  position_lat?: FitNumber;
+  position_long?: FitNumber;
+  altitude?: FitNumber;
+  heart_rate?: FitNumber;
+  power?: FitNumber;
+  cadence?: FitNumber;
 }
 interface DecodedLap {
   timestamp: string;
   start_time?: string;
-  total_elapsed_time?: number;
-  total_distance?: number;
-  total_calories?: number;
+  total_elapsed_time?: FitNumber;
+  total_distance?: FitNumber;
+  total_calories?: FitNumber;
 }
 interface DecodedSession {
   start_time: string;
   sport?: string;
-  total_elapsed_time?: number;
-  total_distance?: number;
-  total_calories?: number;
-  avg_heart_rate?: number;
-  max_heart_rate?: number;
-  avg_power?: number;
-  max_power?: number;
+  total_elapsed_time?: FitNumber;
+  total_distance?: FitNumber;
+  total_calories?: FitNumber;
+  avg_heart_rate?: FitNumber;
+  max_heart_rate?: FitNumber;
+  avg_power?: FitNumber;
+  max_power?: FitNumber;
 }
 interface DecodedWorkout {
   wkt_name?: string;
   sport?: string;
-  num_valid_steps?: number;
+  num_valid_steps?: FitNumber;
 }
 interface DecodedWorkoutStep {
   message_index: { value: number } | number;
   wkt_step_name?: string;
   duration_type?: string;
-  duration_value?: number;
+  duration_value?: FitNumber;
   target_type?: string;
-  target_value?: number;
-  custom_target_value_low?: number;
-  custom_target_value_high?: number;
+  target_value?: FitNumber;
+  custom_target_value_low?: FitNumber;
+  custom_target_value_high?: FitNumber;
   intensity?: string;
 }
 /** The decode shape this mapper expects — matches `fit-file-parser`'s `mode: "list"` output. */
@@ -97,7 +108,26 @@ const SPORT: Record<string, string> = {
 const mapSport = makeDisciplineMapper(SPORT, "fit");
 const disciplineFor = (sport?: string) => mapSport(sport ?? "generic");
 
-const indexOf = (mi: DecodedWorkoutStep["message_index"]) => (typeof mi === "number" ? mi : mi.value);
+/**
+ * Coerce a {@link FitNumber} (or any value a tolerant decoder emitted for a numeric field)
+ * to a finite scalar, or `undefined` when the field carried nothing usable. Unwraps the
+ * `{ value }` object form and — for the COROS field-size defect — takes the first finite
+ * element of an array, ignoring trailing pad/invalid sentinels. Non-finite values (NaN /
+ * FIT "invalid") are treated as absent, so downstream `!= null` guards degrade gracefully.
+ */
+function num(v: unknown): number | undefined {
+  if (Array.isArray(v)) {
+    for (const el of v) {
+      const n = num(el);
+      if (n !== undefined) return n;
+    }
+    return undefined;
+  }
+  if (v != null && typeof v === "object" && "value" in v) return num((v as { value: unknown }).value);
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+const indexOf = (mi: DecodedWorkoutStep["message_index"]) => num(typeof mi === "number" ? mi : mi.value) ?? 0;
 
 // §5.13: Intensity.dimension is an open token (power|pace|hr|speed|grade|…) — cadence isn't yet
 // enumerated in the spec's worked examples but fits the same open mechanism (§5.9).
@@ -120,8 +150,8 @@ const setRoleFor = (intensity?: string) => (intensity ? (SET_ROLE[intensity] ?? 
 const REPEAT_DURATION = /^repeat_until_/;
 
 function targetValue(step: DecodedWorkoutStep): TargetWithRamp | undefined {
-  const low = step.custom_target_value_low,
-    high = step.custom_target_value_high;
+  const low = num(step.custom_target_value_low),
+    high = num(step.custom_target_value_high);
   if (low != null && high != null) {
     // SPEC.md's own Zwift crosswalk (Warmup/Cooldown/Ramp → Intensity.value `ramp`) is the
     // precedent: a warmup/cooldown step's target band is directional, not a plain range.
@@ -129,7 +159,8 @@ function targetValue(step: DecodedWorkoutStep): TargetWithRamp | undefined {
     if (step.intensity === "cooldown") return { ramp: { from: high, to: low } };
     return { range: { min: low, max: high } };
   }
-  if (step.target_value != null) return { absolute: { value: step.target_value } };
+  const value = num(step.target_value);
+  if (value != null) return { absolute: { value } };
   return undefined; // target_type "open" (or no value at all): athlete's choice, no target.
 }
 
@@ -144,18 +175,21 @@ function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): WorkUnit {
   const prescription: Prescription = {};
   let scoring: WorkUnit["scoring"];
   let extension: Extension | undefined;
+  // The FIT profile guarantees a `duration_value` for every value-carrying duration_type;
+  // `?? 0` is a defensive floor for a truncated/sparse decode that dropped it.
+  const durationValue = num(step.duration_value) ?? 0;
   switch (step.duration_type) {
     case "distance":
       scoring = "distance";
-      prescription.distance = { absolute: { value: step.duration_value as number, unit: "m" } };
+      prescription.distance = { absolute: { value: durationValue, unit: "m" } };
       break;
     case "reps":
       scoring = "reps";
-      prescription.reps = step.duration_value;
+      prescription.reps = durationValue;
       break;
     case "calories":
       scoring = "energy";
-      prescription.energy = { absolute: { value: step.duration_value as number, unit: "kcal" } };
+      prescription.energy = { absolute: { value: durationValue, unit: "kcal" } };
       break;
     case "open":
       scoring = "time";
@@ -163,7 +197,7 @@ function stepToWorkUnit(step: DecodedWorkoutStep, idx: number): WorkUnit {
       break;
     case "time":
       scoring = "time";
-      prescription.time = { absolute: { value: step.duration_value as number, unit: "s" } };
+      prescription.time = { absolute: { value: durationValue, unit: "s" } };
       break;
     default:
       // Exotic conditional-stop durations (hr_less_than, power_greater_than, …): rare in
@@ -204,8 +238,8 @@ function mapWorkout(data: FitInput, subject: string, warnings: MapWarning[]): Li
   for (const step of steps) {
     const idx = indexOf(step.message_index);
     if (step.duration_type && REPEAT_DURATION.test(step.duration_type)) {
-      const startIdx = step.duration_value ?? idx;
-      const rounds = step.target_value ?? 1;
+      const startIdx = num(step.duration_value) ?? idx;
+      const rounds = num(step.target_value) ?? 1;
       const group: Block[] = [];
       for (let last = entries.at(-1); last !== undefined && last.minIdx >= startIdx; last = entries.at(-1)) {
         entries.pop();
@@ -242,6 +276,25 @@ function mapWorkout(data: FitInput, subject: string, warnings: MapWarning[]): Li
   ];
 }
 
+/**
+ * One per-lap split → a `continuous` WorkUnit carrying whatever split totals the lap
+ * message reported. All laps are mapped, in order (see `mapActivity`): a lap-structure
+ * defect where a naive reader captures only the first lap (reported for some Suunto
+ * exports) is exactly what iterating the full `laps` array here guards against. Sparse
+ * laps (Suunto/Polar frequently omit distance or calories) just yield a leaner
+ * performance — never a crash.
+ */
+function lapToWorkUnit(lap: DecodedLap, idx: number): WorkUnit {
+  const perf: Performance = {};
+  const distance = num(lap.total_distance);
+  const time = num(lap.total_elapsed_time);
+  const energy = num(lap.total_calories);
+  if (distance != null) perf.distance = { absolute: { value: distance, unit: "m" } };
+  if (time != null) perf.time = { absolute: { value: time, unit: "s" } };
+  if (energy != null) perf.energy = { absolute: { value: energy, unit: "kcal" } };
+  return { id: `fit-lap-wu-${idx}`, recordType: "WorkUnit", scoring: "continuous", performance: perf };
+}
+
 function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): LiveRecord[] {
   const s = data.sessions?.[0];
   if ((data.sessions?.length ?? 0) > 1) {
@@ -251,21 +304,13 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
       context: { count: data.sessions?.length },
     });
   }
-  if (data.laps?.length) {
-    // Lap messages (per-lap splits) have no mapping yet — the session totals cover the
-    // whole recording, but the per-lap breakdown is genuinely dropped.
-    warnings.push({
-      code: "laps-dropped",
-      message: `decode carries ${data.laps.length} lap message(s) — per-lap splits are not mapped (session totals cover the recording)`,
-      context: { count: data.laps.length },
-    });
-  }
+  const laps = data.laps ?? [];
   const records = data.records ?? [];
   const start = s?.start_time ?? records[0]?.timestamp;
   // `start` is defined on every path that reads it: `s` guarantees start_time, and the
   // offsets map only runs over records that exist (records[0] then supplied `start`).
   const t0 = start !== undefined ? new Date(start).getTime() : NaN;
-  const end = s ? iso(new Date(t0 + (s.total_elapsed_time ?? 0) * 1000)) : records[records.length - 1]?.timestamp;
+  const end = s ? iso(new Date(t0 + (num(s.total_elapsed_time) ?? 0) * 1000)) : records[records.length - 1]?.timestamp;
   const offsets = records.map((r) => (new Date(r.timestamp).getTime() - t0) / 1000);
   const prov = (method: Provenance["method"]): Provenance => ({ method, sourceApp: "fit" });
 
@@ -284,10 +329,10 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
     const data = pickSeries(records, pick);
     if (data) pushStream(id, type, unit, data);
   };
-  scalarStream("fit-hr", "heart_rate", "/min", (r) => r.heart_rate);
-  scalarStream("fit-power", "power", "W", (r) => r.power);
-  scalarStream("fit-cadence", "cadence", "/min", (r) => r.cadence);
-  if (records.some((r) => r.position_lat != null)) {
+  scalarStream("fit-hr", "heart_rate", "/min", (r) => num(r.heart_rate));
+  scalarStream("fit-power", "power", "W", (r) => num(r.power));
+  scalarStream("fit-cadence", "cadence", "/min", (r) => num(r.cadence));
+  if (records.some((r) => num(r.position_lat) != null)) {
     out.push({
       id: "fit-route",
       recordType: "Measurement",
@@ -300,7 +345,11 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
           { name: "lon", unit: "deg" },
           { name: "alt", unit: "m" },
         ],
-        dataPoints: records.map((r) => [r.position_lat ?? null, r.position_long ?? null, r.altitude ?? null]),
+        dataPoints: records.map((r) => [
+          num(r.position_lat) ?? null,
+          num(r.position_long) ?? null,
+          num(r.altitude) ?? null,
+        ]),
       },
       startTime: start,
       endTime: end,
@@ -309,10 +358,22 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
     measuredBy.push({ type: "measuredBy", ref: "fit-route" });
   }
 
-  const perf: Performance = {};
-  if (s?.total_distance != null) perf.distance = { absolute: { value: s.total_distance, unit: "m" } };
-  if (s?.total_elapsed_time != null) perf.time = { absolute: { value: s.total_elapsed_time, unit: "s" } };
-  if (s?.total_calories != null) perf.energy = { absolute: { value: s.total_calories, unit: "kcal" } };
+  // Per-lap splits → one WorkUnit each (all laps, in order — the Suunto first-lap-only
+  // guard). Absent laps fall back to a single session-summary WorkUnit so a lap-less
+  // Garmin activity is mapped exactly as before.
+  let workUnits: WorkUnit[];
+  if (laps.length) {
+    workUnits = laps.map((lap, i) => lapToWorkUnit(lap, i));
+  } else {
+    const perf: Performance = {};
+    const distance = num(s?.total_distance);
+    const time = num(s?.total_elapsed_time);
+    const energy = num(s?.total_calories);
+    if (distance != null) perf.distance = { absolute: { value: distance, unit: "m" } };
+    if (time != null) perf.time = { absolute: { value: time, unit: "s" } };
+    if (energy != null) perf.energy = { absolute: { value: energy, unit: "kcal" } };
+    workUnits = [{ id: "fit-session-wu", recordType: "WorkUnit", scoring: "continuous", performance: perf }];
+  }
 
   out.push({
     id: "fit-session",
@@ -324,7 +385,7 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
     endTime: end,
     provenance: prov("sensor"),
     links: measuredBy,
-    workUnits: [{ id: "fit-session-wu", recordType: "WorkUnit", scoring: "continuous", performance: perf }],
+    workUnits,
   });
   return out;
 }
@@ -332,8 +393,16 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
 /**
  * Map a *decoded* FIT activity or structured workout to OpenBody wire records: an
  * activity (`sessions`/`laps`/`records` messages) → Pillar A `sampleArray`
- * Measurements + a performed Session; a workout (`workouts`/`workout_steps`
- * messages) → a planned Session of Block/WorkUnit prescriptions.
+ * Measurements + a performed Session (one WorkUnit per lap when lap messages are
+ * present, else a single session-summary WorkUnit); a workout
+ * (`workouts`/`workout_steps` messages) → a planned Session of Block/WorkUnit
+ * prescriptions.
+ *
+ * Non-Garmin robustness (OB-83): numeric fields are read tolerantly — a tolerant
+ * decoder's array/`{ value }` wrapping of a scalar (COROS's field-size spec
+ * violation, python-fitparse#116) is normalized, not mis-read; every lap is mapped
+ * (guarding the first-lap-only defect seen in some Suunto exports); and missing
+ * optional fields (sparse Polar FIT) simply omit their target rather than crash.
  *
  * Input precondition: this mapper never decodes FIT's binary format itself (see the
  * file header for why) — `input` must be the message-list shape a FIT SDK decoder
@@ -347,8 +416,7 @@ function mapActivity(data: FitInput, subject: string, warnings: MapWarning[]): L
  *
  * Warnings this mapper can emit: `default-subject` (no `opts.subject` given),
  * `extra-sessions-dropped` / `extra-workouts-dropped` (multiple session/workout
- * messages present — only the first is mapped), `laps-dropped` (lap messages present
- * but per-lap splits are not mapped; session totals still cover the recording).
+ * messages present — only the first is mapped).
  */
 export function mapFit(input: FitInput, opts: MapOptions = {}): MapperResult {
   // Structural minimum (WP7): the decoded message-list shape. A decode with NONE of
