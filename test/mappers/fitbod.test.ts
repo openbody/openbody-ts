@@ -13,6 +13,18 @@ describe("mapFitbod", () => {
     expectValidAndStable(mapFitbod(csv).records);
   });
 
+  // Real Fitbod exports stamp Date with a "+0000" offset suffix and pad numeric cells with a
+  // leading space ("2022-10-25 11:00:00 +0000", " 5", " 20.4") — verified against real files.
+  it("handles real-export dates with a +0000 offset and leading-space numerics", () => {
+    const real =
+      "Date,Exercise,Reps,Weight(kg),Duration(s),Distance(m),Incline,Resistance,isWarmup,Note,multiplier\n" +
+      "2022-10-25 11:00:00 +0000, Back Squat, 5, 20.4, 0.0, 0.0, 0.0, 0.0, false, , 1.0";
+    const { records } = mapFitbod(real);
+    expectValidAndStable(records);
+    const [s] = ofKind(records, "Session");
+    expect(s?.startTime, "the +0000 offset is parsed to RFC 3339").toBe("2022-10-25T11:00:00+00:00");
+  });
+
   it("infers sessions from the >3h gap between set timestamps", () => {
     const sessions = ofKind(mapFitbod(csv).records, "Session");
     expect(sessions, "Jan 15 and Jan 18 are separate sessions").toHaveLength(2);

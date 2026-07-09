@@ -11,7 +11,7 @@ import type {
   Session,
   WorkUnit,
 } from "../types.js";
-import { addSeconds, contentHash, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
+import { addSeconds, contentHash, durationSec, num, parseCsvDoc, requireColumns, toRfc3339 } from "./csv.js";
 import { subjectFor } from "./shared.js";
 
 /**
@@ -52,7 +52,7 @@ export function mapStrong(csv: string, opts: MapOptions = {}): MapperResult {
     const start = toRfc3339(f.Date ?? "", off);
     // start + Duration = end (see csv.addSeconds); undefined when the Date cell is blank/
     // unparseable — degrade by omitting endTime + warning (never throw, src/errors.ts).
-    const end = addSeconds(start, Number(f.Duration || 0), off);
+    const end = addSeconds(start, durationSec(f.Duration) ?? 0, off);
     if (end === undefined)
       warnings.push({
         code: "unparseable-date",

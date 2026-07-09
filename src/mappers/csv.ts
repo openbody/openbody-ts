@@ -69,6 +69,21 @@ export const num = (s: string | undefined): number | undefined => {
 };
 
 /**
+ * Seconds from a duration cell. Strong exports the workout duration either as bare seconds
+ * ("3600") or human "1h 43m 5s" (any of the h/m/s parts, real exports use the latter);
+ * returns undefined for a blank/garbled cell so the caller degrades (endTime omitted).
+ */
+export const durationSec = (s: string | undefined): number | undefined => {
+  if (s == null || s.trim() === "") return undefined;
+  const t = s.trim();
+  if (/^\d+(?:\.\d+)?$/.test(t)) return Number(t);
+  const m = /^(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*(?:(\d+)\s*s)?$/i.exec(t);
+  if (m && (m[1] ?? m[2] ?? m[3]) !== undefined)
+    return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+  return undefined;
+};
+
+/**
  * "start + duration = end" for the CSV mappers (Strong/Concept2): strip `start`'s offset,
  * add `seconds` on a fixed UTC anchor (a constant offset cancels in the difference,
  * fitbit.ts precedent), and re-stamp `offset` so the end carries the same offset as the
@@ -121,8 +136,14 @@ const MONTH: Record<string, string> = {
  */
 export function toRfc3339(s: string, utcOffset = "Z"): string {
   const t = s.trim();
-  let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(t);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}${utcOffset}`;
+  let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?\s*(Z|[+-]\d{2}:?\d{2})?$/.exec(t);
+  if (m) {
+    // A trailing offset in the source (e.g. Fitbod's "…11:00:00 +0000") wins over utcOffset;
+    // normalize "+0000" → "+00:00" (RFC 3339 requires the colon). Offset-less ⇒ utcOffset.
+    const src = m[7];
+    const off = src ? (src === "Z" ? "Z" : `${src.slice(0, 3)}:${src.slice(-2)}`) : utcOffset;
+    return `${m[1]}-${m[2]}-${m[3]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}${off}`;
+  }
   m = /^(\d{1,2}) ([A-Za-z]{3,}) (\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
   if (m) {
     const [, day, monName, year, hh, mm, ss] = m;
