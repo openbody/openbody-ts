@@ -9,6 +9,7 @@ export { mapAppleHealth } from "./apple-health.js";
 export { mapConcept2 } from "./concept2.js";
 export { type FitInput, mapFit } from "./fit.js";
 export { type FitbitFile, type FitbitMapOptions, mapFitbitTakeout } from "./fitbit.js";
+export { mapFitbod } from "./fitbod.js";
 export { mapGpx } from "./gpx.js";
 export { mapHevy } from "./hevy.js";
 export { mapHevyMeasurements } from "./hevy-measurements.js";
