@@ -1,0 +1,11 @@
+{
+  "_comment": "SYNTHETIC regression fixture (OB-83) — NOT a real COROS export. Reproduces the SHAPE of COROS's field-size spec violation (python-fitparse#116): a tolerant decoder faced with a field whose declared size isn't a multiple of its base-type size hands scalar fields back wrapped in single-element (sometimes pad-suffixed) arrays, and occasionally as a { value } object. mapFit must normalize these to plain scalars. Real COROS Pace 2 file verification is still outstanding.",
+  "sessions": [
+    { "start_time": "2026-07-02T06:30:00Z", "sport": "running", "total_elapsed_time": [240], "total_distance": [800, 255], "total_calories": { "value": 62 }, "avg_heart_rate": [152], "max_heart_rate": [168] }
+  ],
+  "records": [
+    { "timestamp": "2026-07-02T06:30:00Z", "position_lat": [45.5231], "position_long": [-122.6765], "altitude": [45.2], "heart_rate": [138], "cadence": [168, 255] },
+    { "timestamp": "2026-07-02T06:31:00Z", "position_lat": [45.5241], "position_long": [-122.6755], "altitude": [47.8], "heart_rate": [149], "cadence": [172] },
+    { "timestamp": "2026-07-02T06:32:00Z", "position_lat": [45.5251], "position_long": [-122.6745], "altitude": [51.0], "heart_rate": { "value": 156 }, "cadence": [174] }
+  ]
+}

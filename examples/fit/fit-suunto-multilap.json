@@ -1,0 +1,12 @@
+{
+  "_comment": "SYNTHETIC regression fixture (OB-83) — NOT a real Suunto export. Reproduces the SHAPE of the Suunto lap-structure defect behind first-lap-only import reports: a decode carrying MANY lap messages. A naive reader grabs laps[0] only; mapFit must capture every lap. Real Suunto file verification is still outstanding.",
+  "sessions": [
+    { "start_time": "2026-07-02T06:30:00Z", "sport": "running", "total_elapsed_time": 1200, "total_distance": 4000, "total_calories": 310 }
+  ],
+  "laps": [
+    { "timestamp": "2026-07-02T06:35:00Z", "start_time": "2026-07-02T06:30:00Z", "total_elapsed_time": 300, "total_distance": 1000, "total_calories": 78 },
+    { "timestamp": "2026-07-02T06:40:00Z", "start_time": "2026-07-02T06:35:00Z", "total_elapsed_time": 300, "total_distance": 1000, "total_calories": 77 },
+    { "timestamp": "2026-07-02T06:45:00Z", "start_time": "2026-07-02T06:40:00Z", "total_elapsed_time": 300, "total_distance": 1000, "total_calories": 79 },
+    { "timestamp": "2026-07-02T06:50:00Z", "start_time": "2026-07-02T06:45:00Z", "total_elapsed_time": 300, "total_distance": 1000, "total_calories": 76 }
+  ]
+}
