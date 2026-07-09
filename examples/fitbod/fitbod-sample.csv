@@ -1,0 +1,9 @@
+Date,Exercise,Reps,Weight(kg),Duration(s),Distance(m),Incline,Resistance,isWarmup,Note,multiplier
+2026-01-15 08:00:00,Barbell Bench Press,5,60,0,0,0,0,true,warmup,1
+2026-01-15 08:03:00,Barbell Bench Press,5,80,0,0,0,0,false,,1
+2026-01-15 08:06:00,Barbell Bench Press,5,80,0,0,0,0,false,felt strong,1
+2026-01-15 08:12:00,Pull Up,8,0,0,0,0,0,false,,1.0
+2026-01-15 08:20:00,Plank,0,0,60,0,0,0,false,core hold,1
+2026-01-15 08:30:00,Treadmill Running,0,0,600,1500,2,0,false,cooldown jog,1
+2026-01-18 07:30:00,Barbell Squat,5,100,0,0,0,0,false,,1
+2026-01-18 07:40:00,Leg Press,10,0,0,0,0,50,false,machine,1
