@@ -13,6 +13,16 @@ describe("mapStrong", () => {
     expectValidAndStable(mapStrong(strongCsv).records);
   });
 
+  // Real Strong exports write Duration as human "1h 43m", not bare seconds — verified against
+  // a real export (acaylor/python-data-parsing). Must compute endTime, not drop it.
+  it("parses a human 'Xh Ym' workout Duration into endTime", () => {
+    const csv =
+      "Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout No\n" +
+      "2020-09-15 11:22:57,Chest,1h 43m,Bench Press (Barbell),1,45,5,0,0,,1";
+    const [s] = ofKind(mapStrong(csv).records, "Session");
+    expect(`${s?.startTime}..${s?.endTime}`).toBe("2020-09-15T11:22:57Z..2020-09-15T13:05:57Z");
+  });
+
   it("maps the wall-clock window timezone-independently", () => {
     const strong = ofKind(mapStrong(strongCsv).records, "Session");
     expect(`${strong[0]?.startTime}..${strong[0]?.endTime}`, "want 18:00Z..19:00Z regardless of host TZ").toBe(
