@@ -66,13 +66,13 @@
     "@biomejs/biome": "2.5.2",
     "@changesets/cli": "^2.31.0",
     "@types/node": "^26.1.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "fast-check": "^4.8.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "lint-staged": {
     "*.{ts,js,mjs,cjs,json,jsonc}": "biome check --write --no-errors-on-unmatched"
