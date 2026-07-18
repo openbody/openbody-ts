@@ -63,7 +63,7 @@
     "canonicalize": "^3.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.5.4",
     "@changesets/cli": "^2.31.0",
     "@types/node": "^26.1.0",
     "@vitest/coverage-v8": "^4.1.10",
@@ -71,7 +71,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
     "tsx": "^4.23.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
   "lint-staged": {
