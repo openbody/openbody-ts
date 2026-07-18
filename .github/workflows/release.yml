@@ -52,7 +52,7 @@ jobs:
           token: ${{ secrets.STANDARD_REPO_TOKEN || github.token }}
           ref: main
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Node 24 ships npm >= 11.5.1, which has OIDC trusted publishing AND its bundled
           # `sigstore` (needed for provenance) intact. Do NOT `npm i -g npm@latest` on an older

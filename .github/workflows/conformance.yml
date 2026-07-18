@@ -43,7 +43,7 @@ jobs:
           token: ${{ secrets.STANDARD_REPO_TOKEN || github.token }}
           ref: main
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
