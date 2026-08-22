@@ -70,7 +70,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Open the Version Packages PR, or publish a merged release
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           cwd: openbody-ts
           version: npm run version-packages
